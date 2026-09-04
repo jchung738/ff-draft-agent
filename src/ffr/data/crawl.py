@@ -228,6 +228,9 @@ def crawl_articles(
                 )
                 inserted += 1
                 count += 1
+                if inserted % 20 == 0:
+                    conn.commit()
+                    console.print(f"  {key}: {inserted} docs stored (season {season})")
             conn.commit()
         console.print(f"  {key}: {inserted} docs total so far (season {season})")
     return inserted

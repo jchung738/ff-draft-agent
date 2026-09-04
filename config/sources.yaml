@@ -16,7 +16,7 @@ sources:
     article_patterns: ["www.espn.com/fantasy/football/story*", "www.espn.com/fantasy/football/insider/story*"]
   nfl_com:
     domain: nfl.com
-    article_patterns: ["www.nfl.com/news/*"]
+    article_patterns: ["www.nfl.com/news/fantasy*", "www.nfl.com/news/injury*"]
   yahoo:
     domain: sports.yahoo.com
     article_patterns: ["sports.yahoo.com/fantasy*", "sports.yahoo.com/news/*fantasy*"]

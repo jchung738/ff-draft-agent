@@ -36,6 +36,14 @@ _retry = retry(
     stop=stop_after_attempt(6),
 )
 
+# Lighter retry for bulk article fetches: skip flaky snapshots quickly rather
+# than stalling the whole crawl on archive.org hiccups.
+_retry_light = retry(
+    retry=retry_if_exception(_retryable),
+    wait=wait_exponential(multiplier=2, min=2, max=20),
+    stop=stop_after_attempt(3),
+)
+
 
 @dataclass(frozen=True)
 class Snapshot:
@@ -81,7 +89,7 @@ def _cache_path(snap: Snapshot):
     return HTML_CACHE_DIR / key[:2] / f"{key}.html"
 
 
-@_retry
+@_retry_light
 def _fetch(snap: Snapshot) -> str:
     _throttle()
     # id_ returns the original bytes without wayback chrome/rewriting

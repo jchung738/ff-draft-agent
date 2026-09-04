@@ -195,6 +195,14 @@ def _harness(run_id: str, gen: int, agent: int) -> dict:
     text = f.read_text() if f.exists() else ""
     audit_f = d / f"agent_{agent:02d}.audit.json"
     audit = json.loads(audit_f.read_text()) if audit_f.exists() else None
+    conn = store.connect()
+    row = conn.execute(
+        """SELECT audit_status FROM harness_versions
+           WHERE run_id = ? AND generation = ? AND agent_idx = ?""",
+        (run_id, gen, agent),
+    ).fetchone()
+    conn.close()
+    status = row["audit_status"] if row else None
     prev_f = _gen_dir(run_id, gen - 1) / "harnesses" / f"agent_{agent:02d}.md"
     diff = ""
     if gen > 0 and prev_f.exists():
@@ -207,7 +215,7 @@ def _harness(run_id: str, gen: int, agent: int) -> dict:
                 lineterm="",
             )
         )
-    return {"text": text, "audit": audit, "diff": diff}
+    return {"text": text, "audit": audit, "diff": diff, "status": status}
 
 
 PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>ff-draft-agent observer</title>
@@ -347,7 +355,17 @@ async function refreshTeamlog(){if(!$('run').value||$('logteam').value===''||$('
  el.innerHTML=html}
 async function refreshHarness(){if(!$('run').value||$('agent').value==='')return;
  const h=await j('/api/run/'+$('run').value+'/harness/'+$('gen').value+'/'+$('agent').value);
- $('auditnote').textContent=h.audit?('audit: '+JSON.stringify(h.audit.llm?.violations?.length??0)+' violations flagged'):'';
+ const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
+ let note='';
+ if(h.status){const col={clean:'#7ee787',stripped:'#f1c40f',reverted:'#ff7b72'}[h.status]||'#9fb3c8';
+  note+=`<b style="color:${col}">audit: ${h.status}</b>`}
+ if(h.audit){const v=(h.audit.llm&&h.audit.llm.violations)||[];const pre=h.audit.prescreen||[];
+  note+=` — ${v.length} LLM violation(s), ${pre.length} prescreen hit(s)`;
+  if(v.length||pre.length){note+='<details style="margin-top:4px"><summary style="cursor:pointer">show what was flagged</summary><table style="margin-top:4px">';
+   pre.forEach(p=>note+=`<tr><td class="muted">prescreen: ${esc(p.rule)}</td><td class="ddel">"${esc(p.span)}"</td></tr>`);
+   v.forEach(x=>note+=`<tr><td class="muted">${esc(x.reason||'')}</td><td class="ddel">"${esc(x.span)}"</td></tr>`);
+   note+='</table></details>'}}
+ $('auditnote').innerHTML=note;
  const el=$('harness');
  if($('showdiff').checked&&h.diff){el.innerHTML=h.diff.split('\\n').map(l=>{
    const esc=l.replace(/&/g,'&amp;').replace(/</g,'&lt;');

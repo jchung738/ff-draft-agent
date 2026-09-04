@@ -7,6 +7,8 @@ The harness is byte-frozen for the whole draft, so the prefix caches across all 
 
 from __future__ import annotations
 
+import json
+import threading
 from dataclasses import dataclass, field
 from typing import Callable
 
@@ -15,6 +17,10 @@ import anthropic
 from ffr.agents.tools import SET_LINEUP_TOOL, TOOLS, ToolDispatcher
 from ffr.corpus.api import TimeLockedCorpus
 from ffr.draft.engine import DraftEngine
+
+# Corpus-only research tools (safe off-thread: never touch live engine state)
+PREP_TOOLS = [t for t in TOOLS if t["name"] not in
+              ("get_draft_state", "get_available_players", "make_pick")]
 
 ENGINE_RULES = """You are drafting a fantasy football team in a live 14-team snake draft.
 
@@ -84,11 +90,18 @@ class LLMDrafter:
     max_tool_calls: int = 6
     late_round_start: int = 11      # from this round on, use the reduced budget
     late_round_tool_calls: int = 2
+    prep_research: bool = True      # research the next pick between turns
+    prep_tool_calls: int = 3
+    on_clock_tool_calls: int = 2    # budget when a prep plan is in hand
+    faller_threshold: float = 8.0   # ADP this far below the pick number = faller
     on_usage: Callable[[str, object], None] | None = None  # (model, usage) -> None
     client: anthropic.Anthropic = field(default_factory=anthropic.Anthropic)
     notes: str = ""  # within-trial scratchpad, re-injected each pick (bounded)
     last_pick_reason: str | None = None   # engine reads these into the pick event
     last_pick_sources: dict | None = None  # auto-tracked research provenance
+    _prep_thread: threading.Thread | None = field(default=None, repr=False)
+    _prep_error: Exception | None = field(default=None, repr=False)
+    _prep_sources: dict | None = field(default=None, repr=False)
 
     def _system(self) -> list[dict]:
         return [
@@ -101,6 +114,84 @@ class LLMDrafter:
 
     def _pick_budget(self, rnd: int) -> int:
         return self.max_tool_calls if rnd < self.late_round_start else self.late_round_tool_calls
+
+    # --- between-turn prep research ------------------------------------------
+
+    def start_prep(self, engine: DraftEngine, team_idx: int) -> None:
+        """Called by the engine right after this agent picks: research the NEXT
+        pick in a background thread while the other 13 teams are on the clock.
+        The snapshot is taken synchronously; the thread touches only the corpus."""
+        if not self.prep_research:
+            return
+        picks_made = len([e for e in engine.events if e["type"] == "pick"])
+        next_rnd = picks_made // engine.teams + 1
+        if next_rnd > engine.rounds or next_rnd >= self.late_round_start:
+            return  # late rounds run on the cheap budget without prep
+        snap = ToolDispatcher(corpus=self.corpus, engine=engine, team_idx=team_idx)
+        state, _ = snap.dispatch("get_draft_state", {})
+        available, _ = snap.dispatch("get_available_players", {"limit": 40})
+        prompt = (
+            "PREPARATION (you are NOT on the clock). Your next pick is roughly "
+            f"{json.loads(state).get('picks_until_my_turn', '?')} picks away.\n"
+            f"<draft_state>\n{state}\n</draft_state>\n"
+            f"<available_players>\n{available}\n</available_players>\n"
+            f"Judge who will plausibly still be available at your next turn (players "
+            f"above your pick number by ADP will likely be gone). Research the best "
+            f"candidates with at most {self.prep_tool_calls - 1} tool calls, then "
+            "write your plan as plain text: ranked targets with one-line whys, plus "
+            "a contingency if your top target is gone. Keep it under 250 words."
+        )
+        if self.notes:
+            prompt += f"\n\nYour previous notes:\n{self.notes[:1500]}"
+
+        def work() -> None:
+            try:
+                prep_dispatcher = ToolDispatcher(
+                    corpus=self.corpus, engine=engine, team_idx=team_idx
+                )
+                plan = self._prep_loop(prep_dispatcher, prompt)
+                if plan:
+                    self.notes = plan[:2000]
+                self._prep_sources = {
+                    "queries": prep_dispatcher.searches,
+                    "docs": prep_dispatcher.docs_read,
+                }
+            except Exception as e:  # on-clock loop re-hits budget errors itself
+                self._prep_error = e
+
+        self._prep_thread = threading.Thread(target=work, daemon=True)
+        self._prep_thread.start()
+
+    def _prep_loop(self, dispatcher: ToolDispatcher, prompt: str) -> str:
+        messages: list[dict] = [{"role": "user", "content": prompt}]
+        final = ""
+        for _ in range(self.prep_tool_calls):
+            response = self.client.messages.create(
+                model=self.model,
+                max_tokens=2500,
+                system=self._system(),
+                tools=PREP_TOOLS,
+                messages=messages,
+                **_model_params(self.model),
+            )
+            if self.on_usage:
+                self.on_usage(self.model, response.usage)
+            texts = [b.text for b in response.content if b.type == "text" and b.text.strip()]
+            if texts:
+                final = " ".join(texts)
+            tool_uses = [b for b in response.content if b.type == "tool_use"]
+            if not tool_uses:
+                break
+            messages.append({"role": "assistant", "content": response.content})
+            results = []
+            for tu in tool_uses:
+                result, is_error = dispatcher.dispatch(tu.name, dict(tu.input))
+                results.append(
+                    {"type": "tool_result", "tool_use_id": tu.id,
+                     "content": result, "is_error": is_error}
+                )
+            messages.append({"role": "user", "content": results})
+        return final
 
     def _loop(
         self,
@@ -148,22 +239,49 @@ class LLMDrafter:
     # --- Drafter protocol ---------------------------------------------------
 
     def pick(self, engine: DraftEngine, team_idx: int) -> str:
+        # join the between-turn prep (usually finished 13 picks ago)
+        if self._prep_thread is not None:
+            self._prep_thread.join(timeout=240)
+            self._prep_thread = None
+        self._prep_error = None  # on-clock loop re-raises budget errors itself
+
         dispatcher = ToolDispatcher(corpus=self.corpus, engine=engine, team_idx=team_idx)
         picks_made = len([e for e in engine.events if e["type"] == "pick"])
+        pick_no = picks_made + 1
         rnd = picks_made // engine.teams + 1
-        budget = self._pick_budget(rnd)
+        prepared = bool(self.notes) and rnd > 1 and rnd < self.late_round_start
+        budget = self.on_clock_tool_calls if prepared else self._pick_budget(rnd)
+
+        # engine-computed faller detection: don't trust the model to notice
+        fallers = [
+            p for p in engine.available_sorted()[:40]
+            if p.adp + self.faller_threshold <= pick_no
+        ]
+        if fallers:
+            budget += 1
+
         # Prefetch what agents always ask for first — saves 1-2 round-trips/pick.
         state, _ = dispatcher.dispatch("get_draft_state", {})
         available, _ = dispatcher.dispatch("get_available_players", {"limit": 25})
         prompt = (
-            f"Round {rnd}, overall pick {picks_made + 1}. It is your turn.\n"
+            f"Round {rnd}, overall pick {pick_no}. It is your turn.\n"
             f"<draft_state>\n{state}\n</draft_state>\n"
             f"<available_players>\n{available}\n</available_players>\n"
+        )
+        if fallers:
+            names = ", ".join(
+                f"{p.name} ({p.position}, ADP {p.adp:.0f})" for p in fallers[:5]
+            )
+            prompt += (
+                f"UNEXPECTED FALLERS still on the board: {names}. A faller can be a "
+                "bargain or a red flag — one news check may be worth it.\n"
+            )
+        prompt += (
             f"You have at most {budget} tool calls this pick (make_pick included) — "
             f"research only what the context above cannot tell you, then call make_pick."
         )
         if self.notes:
-            prompt += f"\n\nYour notes from earlier this draft:\n{self.notes[:2000]}"
+            prompt += f"\n\nYour prepared plan/notes:\n{self.notes[:2000]}"
         self._loop(
             dispatcher, prompt, TOOLS,
             done=lambda: dispatcher.pick_result is not None,
@@ -173,10 +291,14 @@ class LLMDrafter:
         self.last_pick_reason = dispatcher.pick_reason or (
             self._last_text.strip()[:600] or None
         )
-        self.last_pick_sources = {
-            "queries": dispatcher.searches,
-            "docs": dispatcher.docs_read,
-        }
+        sources = {"queries": dispatcher.searches, "docs": dispatcher.docs_read}
+        if self._prep_sources:  # include the between-turn research provenance
+            sources = {
+                "queries": self._prep_sources["queries"] + sources["queries"],
+                "docs": self._prep_sources["docs"] + sources["docs"],
+            }
+            self._prep_sources = None
+        self.last_pick_sources = sources
         if dispatcher.pick_result is None:
             raise RuntimeError("drafter did not make a pick")  # engine auto-picks
         return dispatcher.pick_result

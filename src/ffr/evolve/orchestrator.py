@@ -216,24 +216,35 @@ class Orchestrator:
         if (gen_dir / f"_DONE_season_{season}").exists():
             return [json.loads(l) for l in log_path.read_text().splitlines()]
         wconn = store.connect()
+        extra_conns = []
         try:
             log_path.unlink(missing_ok=True)
             lock = lock_date(wconn, season)
-            corpus = TimeLockedCorpus(wconn, season, lock)
             n_llm = self.cfg["llm_agents"]
-            drafters = [
-                LLMDrafter(
+
+            def llm_drafter(i: int) -> LLMDrafter:
+                # own connection per drafter: its prep thread reads the corpus
+                # while another agent is on the clock (usage is sequential per
+                # drafter — prep joins before its next pick)
+                conn = store.connect(check_same_thread=False)
+                extra_conns.append(conn)
+                return LLMDrafter(
                     model=model,
                     harness=harnesses[i],
-                    corpus=corpus,
+                    corpus=TimeLockedCorpus(conn, season, lock),
                     max_tool_calls=self.cfg["max_tool_calls_per_pick"],
                     late_round_start=self.cfg.get("late_round_start", 11),
                     late_round_tool_calls=self.cfg.get("late_round_tool_calls", 2),
+                    prep_research=self.cfg.get("prep_research", True),
+                    prep_tool_calls=self.cfg.get("prep_tool_calls", 3),
+                    on_clock_tool_calls=self.cfg.get("on_clock_tool_calls", 2),
+                    faller_threshold=self.cfg.get("faller_threshold", 8.0),
                     on_usage=on_usage,
                     client=self.client,
                 )
-                if i < n_llm
-                else ADPBot()
+
+            drafters = [
+                llm_drafter(i) if i < n_llm else ADPBot()
                 for i in range(self.cfg["agents"])
             ]
             engine = DraftEngine(
@@ -247,6 +258,8 @@ class Orchestrator:
             return engine.events
         finally:
             wconn.close()
+            for c in extra_conns:
+                c.close()
 
     def _trials(self, gen: int, seasons: list[int]) -> dict:
         gen_dir = self._gen_dir(gen)

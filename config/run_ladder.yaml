@@ -19,6 +19,10 @@ run:
   max_tool_calls_per_pick: 6
   late_round_start: 11                 # rounds 11+ use the reduced budget
   late_round_tool_calls: 2
+  prep_research: true
+  prep_tool_calls: 3
+  on_clock_tool_calls: 2
+  faller_threshold: 8
   llm_rounds: 15
   budget_usd: 1000.0
   seed: 42

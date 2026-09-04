@@ -156,6 +156,13 @@ class DraftEngine:
                 "sources": sources if not forfeited else None,
             }
         )
+        # let the drafter start researching its NEXT pick while others draft
+        start_prep = getattr(drafter, "start_prep", None)
+        if start_prep is not None:
+            try:
+                start_prep(self, team_idx)
+            except Exception:
+                pass  # prep is best-effort; the on-clock path always works
 
     def auto_lineup(self, team_idx: int) -> list[str]:
         """Greedy legal lineup maximizing projections."""

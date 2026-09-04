@@ -21,6 +21,63 @@ def cmd_ingest_stats(args: argparse.Namespace) -> None:
         print(f"  season {row['season']}: {row['n']} player-weeks (max wk {row['max_wk']})")
 
 
+def cmd_crawl_adp(args: argparse.Namespace) -> None:
+    from ffr.data import store
+    from ffr.data.crawl import crawl_adp
+
+    conn = store.connect()
+    for season in range(args.start, args.end + 1):
+        n = crawl_adp(conn, season)
+        resolved = conn.execute(
+            "SELECT COUNT(*) c FROM rankings WHERE season=? AND player_id IS NOT NULL",
+            (season,),
+        ).fetchone()["c"]
+        total = conn.execute(
+            "SELECT COUNT(*) c FROM rankings WHERE season=?", (season,)
+        ).fetchone()["c"]
+        pct = 100 * resolved / total if total else 0
+        print(f"season {season}: {n} rows ingested, {resolved}/{total} resolved ({pct:.1f}%)")
+
+
+def cmd_resolve(args: argparse.Namespace) -> None:
+    """Re-run entity resolution for unresolved ranking rows; print a report."""
+    from ffr.data import store
+    from ffr.data.entities import resolve
+
+    conn = store.connect()
+    fixed = 0
+    for r in conn.execute(
+        "SELECT rowid, raw_name, season, position FROM rankings WHERE player_id IS NULL"
+    ).fetchall():
+        pos = r["position"] if r["position"] != "OVR" else None
+        pid = resolve(conn, r["raw_name"], r["season"], position=pos)
+        if pid:
+            conn.execute("UPDATE rankings SET player_id=? WHERE rowid=?", (pid, r["rowid"]))
+            fixed += 1
+    conn.commit()
+    total = conn.execute("SELECT COUNT(*) c FROM rankings").fetchone()["c"]
+    unresolved = conn.execute(
+        "SELECT COUNT(*) c FROM rankings WHERE player_id IS NULL"
+    ).fetchone()["c"]
+    print(f"re-resolved {fixed}; {unresolved}/{total} still unresolved")
+    for r in conn.execute(
+        """SELECT raw_name, COUNT(*) n FROM rankings WHERE player_id IS NULL
+           GROUP BY raw_name ORDER BY n DESC LIMIT 20"""
+    ):
+        print(f"  {r['n']:4d}  {r['raw_name']}")
+
+
+def cmd_crawl_articles(args: argparse.Namespace) -> None:
+    from ffr.data import store
+    from ffr.data.crawl import crawl_articles
+
+    conn = store.connect()
+    keys = args.sources.split(",") if args.sources else None
+    for season in range(args.start, args.end + 1):
+        n = crawl_articles(conn, season, source_keys=keys, max_docs_per_source=args.max_docs)
+        print(f"season {season}: {n} articles stored")
+
+
 def cmd_draft(args: argparse.Namespace) -> None:
     """Run one bot-only draft on a real season and score it against ground truth."""
     from ffr.data import store
@@ -48,6 +105,12 @@ def cmd_draft(args: argparse.Namespace) -> None:
         print(f"{label:7s} mean={sum(scores)/len(scores):7.1f}  n={len(scores)}")
 
 
+def cmd_evolve(args: argparse.Namespace) -> None:
+    from ffr.evolve.orchestrator import Orchestrator
+
+    Orchestrator(args.run_id).run()
+
+
 def main() -> None:
     ensure_ca_bundle()
     parser = argparse.ArgumentParser(prog="ffr")
@@ -58,10 +121,29 @@ def main() -> None:
     p.add_argument("--end", type=int, default=2025)
     p.set_defaults(func=cmd_ingest_stats)
 
+    p = sub.add_parser("crawl-adp", help="ingest FantasyPros ADP via Wayback")
+    p.add_argument("--start", type=int, default=2015)
+    p.add_argument("--end", type=int, default=2025)
+    p.set_defaults(func=cmd_crawl_adp)
+
+    p = sub.add_parser("resolve", help="re-resolve unresolved ranking names")
+    p.set_defaults(func=cmd_resolve)
+
+    p = sub.add_parser("crawl-articles", help="ingest news articles via Wayback")
+    p.add_argument("--start", type=int, default=2015)
+    p.add_argument("--end", type=int, default=2025)
+    p.add_argument("--sources", type=str, default=None, help="comma-separated source keys")
+    p.add_argument("--max-docs", type=int, default=400)
+    p.set_defaults(func=cmd_crawl_articles)
+
     p = sub.add_parser("draft", help="run bot-only drafts on a real season")
     p.add_argument("--season", type=int, default=2022)
     p.add_argument("--trials", type=int, default=10)
     p.set_defaults(func=cmd_draft)
+
+    p = sub.add_parser("evolve", help="run the harness evolution loop")
+    p.add_argument("--run-id", type=str, required=True)
+    p.set_defaults(func=cmd_evolve)
 
     args = parser.parse_args()
     args.func(args)

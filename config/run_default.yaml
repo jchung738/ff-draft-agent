@@ -1,0 +1,16 @@
+# Evolution run configuration
+run:
+  generations: 3
+  agents: 14                 # LLM lineages; set llm_agents < 14 to mix in frozen bots
+  llm_agents: 14
+  seasons_per_generation: 2
+  train_seasons: [2016, 2017, 2018, 2019, 2020, 2021, 2022]
+  holdout_seasons: [2023, 2024]   # never used during evolution
+  drafter_model: claude-haiku-4-5
+  rewriter_model: claude-sonnet-4-6
+  auditor_model: claude-opus-4-8
+  max_tool_calls_per_pick: 6
+  llm_rounds: 15             # rounds where the LLM picks; later rounds ADP auto-pick
+  budget_usd: 25.0           # orchestrator halts cleanly past this
+  seed: 42
+  audit_strip_threshold: 0.30  # >30% stripped -> revert to last clean ancestor

@@ -46,6 +46,16 @@ week_windows:
     first_week: 1
     last_week: 17
 
+# Weekly promotion of in-form bench players into the lineup (backward-looking
+# only; mirrors real managers starting the hot hand). Waivers never promote —
+# only DRAFTED breakouts earn this, keeping the draft the thing being measured.
+promotion:
+  enabled: true
+  window_games: 3     # recent form = PPG over last N played games
+  min_games: 2        # candidate needs at least this many games played
+  margin_ratio: 1.2   # must beat the occupant's recent PPG by 20%...
+  margin_points: 2.0  # ...and by at least 2 points (hysteresis vs noise)
+
 lineup:
   teams: 14
   rounds: 15

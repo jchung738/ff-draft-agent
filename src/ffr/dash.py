@@ -335,8 +335,11 @@ async function refreshTeamlog(){if(!$('run').value||$('logteam').value===''||$('
   w.slots.forEach(s=>{
    if(!s.occupant){html+=`<td class="muted" title="${s.sub?nm(s.starter)+' out ('+s.sub.cause+'), no replacement':''}">—</td>`;return}
    const subbed=s.occupant!==s.starter;
-   const style=subbed?(s.sub.cause==='bye'?'background:#1d3a52':'background:#4a2525'):'';
-   const tip=subbed?` title="in for ${nm(s.starter)} (${s.sub.cause}) — from ${s.sub.from}"`:'';
+   const bg={bye:'background:#1d3a52',injury:'background:#4a2525',promotion:'background:#1f4a2a'};
+   const style=subbed?(bg[s.sub.cause]||''):'';
+   const tip=subbed?(s.sub.cause==='promotion'
+     ?` title="promoted over ${nm(s.starter)} on recent form"`
+     :` title="in for ${nm(s.starter)} (${s.sub.cause}) — from ${s.sub.from}"`):'';
    html+=`<td style="${style}"${tip}>${nm(s.occupant)}<br><span class="adp">${s.points}</span></td>`});
   html+=`<td><b>${w.total}</b></td>`;
   benchIds.forEach(b=>{const v=t.players[b].weekly[w.week];
@@ -346,10 +349,18 @@ async function refreshTeamlog(){if(!$('run').value||$('logteam').value===''||$('
    html+=`<td style="${style}"${tip}>${v===undefined?'·':v}</td>`});
   html+='</tr>'});
  html+='</table></div>';
- // roster moves list
- const moves=[];t.weeks.forEach(w=>w.slots.forEach(s=>{
-  if(s.occupant&&s.occupant!==s.starter)moves.push(`wk ${w.week}: ${s.slot} — ${nm(s.starter)} out (${s.sub.cause}) → ${nm(s.occupant)} [${s.sub.from}] ${s.points} pts`);
-  if(!s.occupant&&s.sub)moves.push(`wk ${w.week}: ${s.slot} — ${nm(s.starter)} out (${s.sub.cause}) → no eligible replacement, 0 pts`)}));
+ // roster moves list (dedupe consecutive identical states per slot)
+ const moves=[];const prevState={};
+ t.weeks.forEach(w=>w.slots.forEach((s,si)=>{
+  const state=(s.occupant||'none')+'|'+(s.sub?s.sub.cause:'starter');
+  if(state!==prevState[si]){
+   if(s.occupant&&s.occupant!==s.starter){
+    moves.push(s.sub.cause==='promotion'
+     ?`wk ${w.week}: ${s.slot} — ${nm(s.occupant)} PROMOTED over ${nm(s.starter)} (recent form)`
+     :`wk ${w.week}: ${s.slot} — ${nm(s.starter)} out (${s.sub.cause}) → ${nm(s.occupant)} [${s.sub.from}] ${s.points} pts`)}
+   else if(!s.occupant&&s.sub)moves.push(`wk ${w.week}: ${s.slot} — ${nm(s.starter)} out (${s.sub.cause}) → no eligible replacement, 0 pts`);
+   else if(prevState[si]&&prevState[si].includes('promotion'))moves.push(`wk ${w.week}: ${s.slot} — ${nm(s.starter)} back in the lineup`)}
+  prevState[si]=state}));
  html+='<h2 style="margin-top:12px">Roster moves</h2>'+(moves.length?'<pre style="max-height:200px">'+moves.join('\\n')+'</pre>':'<span class="muted">none — every starter played every week</span>');
  // player-by-week grid
  const wks=t.weeks.map(w=>w.week);

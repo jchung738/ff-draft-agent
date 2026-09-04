@@ -192,6 +192,56 @@ def test_kdst_injury_streams_from_waivers(sub_conn):
     assert wk3["sub"] == {"cause": "injury", "from": "waiver"}
 
 
+def test_breakout_bench_player_gets_promoted_and_demoted(tmp_path):
+    """A bench breakout takes the slot on recent form; a slump gives it back."""
+    from ffr.draft.scoring import simulate_roster
+
+    conn = connect(tmp_path / "t.sqlite")
+    conn.executemany(
+        "INSERT INTO players VALUES (?,?,?,2015,2026)",
+        [("vet", "Steady Vet", "RB"), ("rook", "Breakout Rook", "RB")],
+    )
+    conn.executemany(
+        "INSERT INTO player_seasons VALUES (?,2019,'AAA','RB',16)",
+        [("vet",), ("rook",)],
+    )
+    weekly = [("DST_AAA", wk, 0.0) for wk in range(1, 9)]           # no byes
+    weekly += [("vet", wk, 8.0) for wk in range(1, 9)]              # steady 8/wk
+    rook_pts = {1: 2.0, 2: 14.0, 3: 16.0, 4: 18.0, 5: 3.0, 6: 2.0, 7: 1.0, 8: 1.0}
+    weekly += [("rook", wk, p) for wk, p in rook_pts.items()]
+    conn.executemany("INSERT INTO weekly_points VALUES (?,2019,?,?)", weekly)
+    conn.commit()
+
+    sim = simulate_roster(conn, ["vet"], ["rook"], 2019, drafted_ids={"vet", "rook"})
+    by_week = {w["week"]: w["slots"][0] for w in sim["weeks"]}
+    # wk3: rook form (2,14)=8 vs vet 8 -> below margin, no promotion
+    assert by_week[3]["occupant"] == "vet"
+    # wk4: rook form (2,14,16)=10.7 >= max(8*1.2, 8+2)=10 -> promoted
+    assert by_week[4]["occupant"] == "rook"
+    assert by_week[4]["sub"] == {"cause": "promotion", "from": "bench"}
+    # rook holds the slot while hot
+    assert by_week[5]["occupant"] == "rook"
+    # wk8: rook form (3,2,1)=2 -> vet 8 >= max(2.4, 4) -> demoted; vet is the
+    # original starter again so the slot reads as normal
+    assert by_week[8]["occupant"] == "vet"
+    assert by_week[8]["sub"] is None
+    # totals: vet 8x(wk1-3) + rook 18+3+2+1 (wk4-7) + vet 8 (wk8)
+    assert sim["total"] == pytest.approx(8 * 3 + 18 + 3 + 2 + 1 + 8)
+
+
+def test_waiver_players_never_promote(sub_conn):
+    """Only drafted players earn slots on form — waivers cover absences only."""
+    from ffr.draft.scoring import simulate_roster
+
+    # rb_wav (undrafted) has strong form by wk3 (8, 10) but rb_star plays wk3?
+    # No: star is out wk3 (injury) -> coverage happens, but never a promotion.
+    sim = simulate_roster(sub_conn, ["rb_star"], [], 2019, drafted_ids={"rb_star"})
+    for w in sim["weeks"]:
+        for s in w["slots"]:
+            if s["sub"]:
+                assert s["sub"]["cause"] != "promotion"
+
+
 def test_bench_player_covers_only_one_slot(sub_conn):
     from ffr.draft.scoring import score_roster
 

@@ -233,6 +233,10 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>ff-draft-agent
  .forfeit{outline:2px solid #c0392b} .cur{outline:2px solid #f1c40f}
  .pos{opacity:.65;font-size:9px} .adp{opacity:.5;font-size:9px}
  td[title]{cursor:help} .why{color:#7ec8ff;font-size:9px}
+ #pop{position:fixed;right:18px;top:56px;max-width:400px;background:#1a2027;border:1px solid #4a5866;
+  border-radius:8px;padding:12px;z-index:50;box-shadow:0 6px 24px rgba(0,0,0,.5);display:none;font-size:12px}
+ #pop .x{position:absolute;top:6px;right:9px;cursor:pointer;color:#9fb3c8;font-size:14px}
+ #pop h3{margin:0 0 6px;font-size:13px;color:#7ec8ff} #pop .src{opacity:.75;font-size:11px;margin-top:8px}
  pre{background:#0d1116;border:1px solid #2a333d;border-radius:6px;padding:10px;font-size:11px;overflow:auto;max-height:480px;white-space:pre-wrap}
  .dadd{color:#7ee787}.ddel{color:#ff7b72}.dhead{color:#79c0ff}
  .rank1{color:#f1c40f;font-weight:bold} .muted{opacity:.55} .live{color:#7ee787}
@@ -246,6 +250,7 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>ff-draft-agent
   <span id="peta" class="muted"></span></span>
  <span style="flex:1"></span>
  <span id="cost" class="muted"></span></header>
+<div id="pop"><span class="x" onclick="this.parentElement.style.display='none'">✕</span><div id="popbody"></div></div>
 <main>
  <div class="card"><h2>Draft board <span id="live" class="live"></span></h2><div style="overflow:auto"><table class="board" id="board"></table></div></div>
  <div class="row">
@@ -293,10 +298,11 @@ function renderStandings(){const g=state.generations.find(x=>String(x.gen)===$('
   t.insertAdjacentHTML('beforeend',`<tr><td>${a}</td><td>${r.toFixed(2)}</td><td>${sc}</td></tr>`)})}
 async function refreshDraft(){if(!$('run').value||$('season').value==='')return;
  const d=await j('/api/run/'+$('run').value+'/draft/'+$('gen').value+'/'+$('season').value);
+ window.lastPicks=d.picks;
  const teams=14,rounds=15,t=$('board');const bySlot={};(d.slot_order||[]).forEach((team,slot)=>bySlot[slot]=team);
  $('live').textContent=d.done?'':'● live — pick '+(d.picks.length+1);
  let html='<tr><th></th>';for(let s=0;s<teams;s++)html+=`<th>slot ${s+1}<br>agent ${bySlot[s]??''}</th>`;html+='</tr>';
- const grid={};d.picks.forEach(p=>{grid[p.round+'-'+p.slot]=p});
+ const grid={};d.picks.forEach((p,i)=>{p.idx=i;grid[p.round+'-'+p.slot]=p});
  for(let r=1;r<=rounds;r++){html+=`<tr><th>R${r}</th>`;
   for(let s=0;s<teams;s++){const p=grid[r+'-'+s];
    if(p){const cls=p.position+(p.forfeited?' forfeit':'');
@@ -305,7 +311,8 @@ async function refreshDraft(){if(!$('run').value||$('season').value==='')return;
      if(s.queries&&s.queries.length)tipText+='\\n\\nsearched: '+s.queries.join(' | ');
      if(s.docs&&s.docs.length)tipText+='\\nread:\\n'+s.docs.map(d=>`  [${d.source} ${d.date}] ${d.title||d.url}`).join('\\n')}
     const why=tipText.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
-    const tip=why?` title="${why}"`:'';const mark=why?' <span class="why">&#9432;</span>':'';
+    const tip=why?` title="${why}" data-pi="${p.idx}" style="cursor:pointer"`:'';
+    const mark=why?' <span class="why">&#9432;</span>':'';
     html+=`<td class="${cls}"${tip}>${p.name}${mark}<br><span class="pos">${p.position}</span> <span class="adp">adp ${p.adp??''}</span></td>`}
    else{const isNext=d.picks.length&&!d.done&&nextCell(d)===r+'-'+s;html+=`<td class="${isNext?'cur':''}"></td>`}}
   html+='</tr>'}
@@ -381,6 +388,16 @@ async function refreshHarness(){if(!$('run').value||$('agent').value==='')return
  else{el.textContent=h.text}}
 async function tick(){try{await refreshRuns();await refreshState();await refreshDraft();await refreshTeamlog();await refreshHarness()}catch(e){$('status').textContent='… '+e}}
 ['run','gen','season','agent','logteam','showdiff'].forEach(id=>$(id).addEventListener('change',tick));
+$('board').addEventListener('click',e=>{
+ const td=e.target.closest('td[data-pi]');if(!td||!window.lastPicks)return;
+ const p=window.lastPicks[+td.dataset.pi];if(!p)return;
+ const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+ let b=`<h3>R${p.round} — ${esc(p.name)} <span class="muted">(${p.position}, adp ${p.adp??'?'}, agent ${p.team})</span></h3>`;
+ b+=p.reason?`<div>${esc(p.reason)}</div>`:'<div class="muted">no stated reasoning</div>';
+ if(p.sources){const s=p.sources;
+  if(s.queries&&s.queries.length)b+=`<div class="src"><b>searched:</b> ${s.queries.map(esc).join(' · ')}</div>`;
+  if(s.docs&&s.docs.length)b+=`<div class="src"><b>read:</b><br>${s.docs.map(d=>`[${esc(d.source)} ${esc(d.date)}] ${esc(d.title||d.url)}`).join('<br>')}</div>`}
+ $('popbody').innerHTML=b;$('pop').style.display='block'});
 tick();setInterval(tick,3000);
 </script></body></html>"""
 

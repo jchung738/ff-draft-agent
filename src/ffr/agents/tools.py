@@ -116,7 +116,7 @@ TOOLS: list[dict] = [
                     "description": "1-2 sentences: why this pick over the alternatives you considered",
                 },
             },
-            "required": ["player_id"],
+            "required": ["player_id", "reasoning"],
         },
     },
 ]

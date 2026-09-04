@@ -104,6 +104,7 @@ class LLMDrafter:
         done: Callable[[], bool],
     ) -> None:
         messages: list[dict] = [{"role": "user", "content": user_prompt}]
+        self._last_text = ""
         for _ in range(self.max_tool_calls):
             response = self.client.messages.create(
                 model=self.model,
@@ -115,6 +116,9 @@ class LLMDrafter:
             )
             if self.on_usage:
                 self.on_usage(self.model, response.usage)
+            texts = [b.text for b in response.content if b.type == "text" and b.text.strip()]
+            if texts:
+                self._last_text = " ".join(texts)
             tool_uses = [b for b in response.content if b.type == "tool_use"]
             if not tool_uses:
                 break  # gave up without acting; engine fallback handles it
@@ -149,7 +153,10 @@ class LLMDrafter:
         self._loop(
             dispatcher, prompt, TOOLS, done=lambda: dispatcher.pick_result is not None
         )
-        self.last_pick_reason = dispatcher.pick_reason
+        # fall back to the agent's own commentary if it skipped the reasoning arg
+        self.last_pick_reason = dispatcher.pick_reason or (
+            self._last_text.strip()[:600] or None
+        )
         self.last_pick_sources = {
             "queries": dispatcher.searches,
             "docs": dispatcher.docs_read,

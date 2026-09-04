@@ -39,10 +39,12 @@ Evaluate early picks by starter quality; evaluate bench picks by how likely
 they are to be needed (injury-prone starters, ambiguous backfields, handcuffs)
 and how well they'd score if pressed into the lineup.
 
-You have research tools: news search (only pre-draft news is available), ADP,
-player history, and prior-season results. You may use at most {max_tool_calls}
-tool calls per pick, so be efficient. When ready, call make_pick. If you fail to
-make a legal pick, the system auto-picks for you (badly) — always end with make_pick.
+Each pick prompt already includes your draft state and the top available
+players by ADP — do not spend tool calls re-fetching those. Use your limited
+tool budget (stated each pick) on what the prompt cannot tell you: news search
+(only pre-draft news exists), ADP trends, player history, prior-season results.
+When ready, call make_pick. If you fail to make a legal pick, the system
+auto-picks for you (badly) — always end with make_pick.
 
 Your strategy document (written by you, refined across many drafts):
 """
@@ -80,6 +82,8 @@ class LLMDrafter:
     harness: str
     corpus: TimeLockedCorpus
     max_tool_calls: int = 6
+    late_round_start: int = 11      # from this round on, use the reduced budget
+    late_round_tool_calls: int = 2
     on_usage: Callable[[str, object], None] | None = None  # (model, usage) -> None
     client: anthropic.Anthropic = field(default_factory=anthropic.Anthropic)
     notes: str = ""  # within-trial scratchpad, re-injected each pick (bounded)
@@ -90,11 +94,13 @@ class LLMDrafter:
         return [
             {
                 "type": "text",
-                "text": ENGINE_RULES.format(max_tool_calls=self.max_tool_calls)
-                + "\n<harness>\n" + self.harness + "\n</harness>",
+                "text": ENGINE_RULES + "\n<harness>\n" + self.harness + "\n</harness>",
                 "cache_control": {"type": "ephemeral"},
             }
         ]
+
+    def _pick_budget(self, rnd: int) -> int:
+        return self.max_tool_calls if rnd < self.late_round_start else self.late_round_tool_calls
 
     def _loop(
         self,
@@ -102,10 +108,11 @@ class LLMDrafter:
         user_prompt: str,
         tools: list[dict],
         done: Callable[[], bool],
+        budget: int | None = None,
     ) -> None:
         messages: list[dict] = [{"role": "user", "content": user_prompt}]
         self._last_text = ""
-        for _ in range(self.max_tool_calls):
+        for _ in range(budget or self.max_tool_calls):
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=4000,
@@ -144,14 +151,23 @@ class LLMDrafter:
         dispatcher = ToolDispatcher(corpus=self.corpus, engine=engine, team_idx=team_idx)
         picks_made = len([e for e in engine.events if e["type"] == "pick"])
         rnd = picks_made // engine.teams + 1
+        budget = self._pick_budget(rnd)
+        # Prefetch what agents always ask for first — saves 1-2 round-trips/pick.
+        state, _ = dispatcher.dispatch("get_draft_state", {})
+        available, _ = dispatcher.dispatch("get_available_players", {"limit": 25})
         prompt = (
-            f"Round {rnd}, overall pick {picks_made + 1}. It is your turn. "
-            f"Research as needed, then call make_pick."
+            f"Round {rnd}, overall pick {picks_made + 1}. It is your turn.\n"
+            f"<draft_state>\n{state}\n</draft_state>\n"
+            f"<available_players>\n{available}\n</available_players>\n"
+            f"You have at most {budget} tool calls this pick (make_pick included) — "
+            f"research only what the context above cannot tell you, then call make_pick."
         )
         if self.notes:
             prompt += f"\n\nYour notes from earlier this draft:\n{self.notes[:2000]}"
         self._loop(
-            dispatcher, prompt, TOOLS, done=lambda: dispatcher.pick_result is not None
+            dispatcher, prompt, TOOLS,
+            done=lambda: dispatcher.pick_result is not None,
+            budget=budget,
         )
         # fall back to the agent's own commentary if it skipped the reasoning arg
         self.last_pick_reason = dispatcher.pick_reason or (

@@ -116,6 +116,15 @@ def cmd_evolve(args: argparse.Namespace) -> None:
     Orchestrator(args.run_id, config_path=config).run()
 
 
+def cmd_eval_holdout(args: argparse.Namespace) -> None:
+    from pathlib import Path
+
+    from ffr.evolve.orchestrator import Orchestrator
+
+    config = Path(args.config) if args.config else None
+    Orchestrator(args.run_id, config_path=config).evaluate_holdout()
+
+
 def main() -> None:
     ensure_ca_bundle()
     parser = argparse.ArgumentParser(prog="ffr")
@@ -155,6 +164,11 @@ def main() -> None:
     p.add_argument("--run-id", type=str, required=True)
     p.add_argument("--config", type=str, default=None, help="run config yaml")
     p.set_defaults(func=cmd_evolve)
+
+    p = sub.add_parser("eval-holdout", help="draft holdout seasons with final harnesses")
+    p.add_argument("--run-id", type=str, required=True)
+    p.add_argument("--config", type=str, default=None)
+    p.set_defaults(func=cmd_eval_holdout)
 
     args = parser.parse_args()
     args.func(args)

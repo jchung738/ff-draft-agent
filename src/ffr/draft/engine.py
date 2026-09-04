@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 import random
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Protocol
 
 from ffr.config import lineup_config
 from ffr.draft.roster import PlayerRef, Roster
@@ -59,6 +61,7 @@ class DraftEngine:
         self.slot_order = list(range(self.teams))
         rng.shuffle(self.slot_order)
         self.available = {p.player_id: p for p in self.pool}
+        self._log_lock = threading.Lock()
 
     # --- mechanics -------------------------------------------------------
 
@@ -97,10 +100,11 @@ class DraftEngine:
         return self.available_sorted()[0]
 
     def _log(self, event: dict) -> None:
-        self.events.append(event)
-        if self.log_path:
-            with open(self.log_path, "a") as f:
-                f.write(json.dumps(event) + "\n")
+        with self._log_lock:
+            self.events.append(event)
+            if self.log_path:
+                with open(self.log_path, "a") as f:
+                    f.write(json.dumps(event) + "\n")
 
     def _execute_pick(
         self, pick_no: int, rnd: int, team_idx: int, drafter: Drafter
@@ -191,7 +195,9 @@ class DraftEngine:
             rnd = (pick_no - 1) // self.teams
             self._execute_pick(pick_no, rnd, team_idx, drafters[team_idx])
 
-        for team_idx, drafter in enumerate(drafters):
+        # Lineup locking touches only each team's own roster: fan out in parallel,
+        # then log in team order so event logs stay deterministic.
+        def lock_lineup(team_idx: int, drafter: Drafter) -> dict:
             roster = self.rosters[team_idx]
             fallback = None
             try:
@@ -203,12 +209,18 @@ class DraftEngine:
                 fallback = f"lineup error: {e}"
             if fallback:
                 starters = self.auto_lineup(team_idx)
-            self.lineups[team_idx] = starters
-            self._log(
-                {
-                    "type": "lineup",
-                    "team": team_idx,
-                    "starters": starters,
-                    "fallback": fallback,
-                }
-            )
+            return {
+                "type": "lineup",
+                "team": team_idx,
+                "starters": starters,
+                "fallback": fallback,
+            }
+
+        with ThreadPoolExecutor(max_workers=self.teams) as pool:
+            futures = [
+                pool.submit(lock_lineup, i, d) for i, d in enumerate(drafters)
+            ]
+            events = [f.result() for f in futures]
+        for event in events:  # futures list is in team order
+            self.lineups[event["team"]] = event["starters"]
+            self._log(event)

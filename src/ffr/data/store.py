@@ -134,11 +134,17 @@ CREATE TABLE IF NOT EXISTS cost_ledger (
 """
 
 
-def connect(db_path: Path | None = None) -> sqlite3.Connection:
-    """Open (and initialize) the database. Returns a Row-factory connection."""
+def connect(
+    db_path: Path | None = None, check_same_thread: bool = True
+) -> sqlite3.Connection:
+    """Open (and initialize) the database. Returns a Row-factory connection.
+
+    check_same_thread=False is for connections shared across threads behind an
+    external lock (e.g. the orchestrator's cost ledger).
+    """
     path = db_path or DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, check_same_thread=check_same_thread, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")

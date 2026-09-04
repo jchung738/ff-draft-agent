@@ -20,13 +20,23 @@ ENGINE_RULES = """You are drafting a fantasy football team in a live 14-team sna
 
 League settings:
 - Half-PPR scoring (0.5 per reception), 15 roster spots.
-- Starting lineup (locked after the draft for the ENTIRE season): 1 QB, 2 RB, 2 WR,
-  1 TE, 1 FLEX (RB/WR/TE), 1 K, 1 DST. Bench players score NOTHING, ever.
-- Your team's score = the actual season points of your 9 locked starters
-  (final regular-season week excluded). Highest score among the 14 teams wins.
+- Starting lineup (locked after the draft): 1 QB, 2 RB, 2 WR, 1 TE,
+  1 FLEX (RB/WR/TE), 1 K, 1 DST.
+- Weekly simulation over the season (final regular-season week excluded):
+  * Starters score their actual points each week they play.
+  * INJURY/INACTIVE: if a starter misses a game, your best active BENCH player
+    at that position automatically covers the slot that week. Handcuffs and
+    bench depth therefore have real value.
+  * BYE weeks: the slot is covered by the best of your bench OR the best
+    available waiver (undrafted) player, so byes are survivable; K/DST byes
+    are auto-streamed from waivers.
+  * Substitutions are automatic next-man-up by season-to-date form — you make
+    no in-season decisions, so draft the roster you'd want that engine to run.
+- Your team's score = sum of weekly lineup points. Highest of 14 teams wins.
 
-Because bench players never score, depth only matters as insurance is worthless —
-every pick should be evaluated by how it upgrades your locked starting 9.
+Evaluate early picks by starter quality; evaluate bench picks by how likely
+they are to be needed (injury-prone starters, ambiguous backfields, handcuffs)
+and how well they'd score if pressed into the lineup.
 
 You have research tools: news search (only pre-draft news is available), ADP,
 player history, and prior-season results. You may use at most {max_tool_calls}

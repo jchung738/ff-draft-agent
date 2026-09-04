@@ -16,7 +16,7 @@ from ffr.data.season_meta import lock_date
 from ffr.draft.bots import ADPBot
 from ffr.draft.engine import DraftEngine
 from ffr.draft.pool import pool_from_rankings
-from ffr.draft.scoring import score_lineup
+from ffr.draft.scoring import score_roster
 
 SEASON = int(sys.argv[1]) if len(sys.argv) > 1 else 2022
 MODEL = "claude-haiku-4-5"
@@ -45,7 +45,12 @@ engine = DraftEngine(
 )
 engine.run(drafters)
 
-scores = {i: score_lineup(conn, engine.lineups[i], SEASON) for i in range(14)}
+drafted = {e["player_id"] for e in engine.events if e["type"] == "pick"}
+def _score(i):
+    starters = engine.lineups[i]
+    bench = [p.player_id for p in engine.rosters[i].players if p.player_id not in starters]
+    return score_roster(conn, starters, bench, SEASON, drafted)
+scores = {i: _score(i) for i in range(14)}
 rank = sorted(scores, key=lambda i: -scores[i]).index(0) + 1
 llm_picks = [e for e in engine.events if e["type"] == "pick" and e["team"] == 0]
 forfeits = [e for e in llm_picks if e["forfeited"]]

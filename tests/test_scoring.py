@@ -85,3 +85,94 @@ def test_fixed_starters_scoring(tmp_path):
     )
     assert score_lineup(conn, ["p1", "p2"], 2023) == pytest.approx(350.5)
     assert score_lineup(conn, ["p1", "missing"], 2023) == pytest.approx(200.0)
+
+
+# --- next-man-up substitution + bye-week waiver streaming --------------------
+
+
+@pytest.fixture
+def sub_conn(tmp_path):
+    """Season 2019 (weeks 1-16 scored). Teams AAA (bye wk 2) and BBB.
+
+    rb_star (AAA, starter): plays wk1, bye wk2, injured wk3 (team plays, no row)
+    rb_hand (AAA, bench handcuff): plays wk1 and wk3, bye wk2
+    rb_wav  (BBB, undrafted): plays wk1-3
+    rb_b2   (BBB, second bench RB): plays wk1-3, weaker
+    """
+    conn = connect(tmp_path / "t.sqlite")
+    players = [
+        ("rb_star", "Star Back", "RB"), ("rb_hand", "Handcuff Back", "RB"),
+        ("rb_wav", "Waiver Back", "RB"), ("rb_b2", "Bench Two", "RB"),
+    ]
+    conn.executemany(
+        "INSERT INTO players VALUES (?,?,?,2015,2026)", players
+    )
+    conn.executemany(
+        "INSERT INTO player_seasons VALUES (?,2019,?,'RB',16)",
+        [("rb_star", "AAA"), ("rb_hand", "AAA"), ("rb_wav", "BBB"), ("rb_b2", "BBB")],
+    )
+    weekly = [
+        # team-week markers (DST pseudo-players define which teams played)
+        ("DST_AAA", 1, 0.0), ("DST_AAA", 3, 0.0),          # AAA bye in wk 2
+        ("DST_BBB", 1, 0.0), ("DST_BBB", 2, 0.0), ("DST_BBB", 3, 0.0),
+        ("rb_star", 1, 20.0),                                # then bye, then hurt
+        ("rb_hand", 1, 5.0), ("rb_hand", 3, 15.0),
+        ("rb_wav", 1, 8.0), ("rb_wav", 2, 10.0), ("rb_wav", 3, 12.0),
+        ("rb_b2", 1, 2.0), ("rb_b2", 2, 3.0), ("rb_b2", 3, 4.0),
+    ]
+    conn.executemany(
+        "INSERT INTO weekly_points VALUES (?,2019,?,?)", weekly
+    )
+    conn.commit()
+    return conn
+
+
+def test_injury_uses_bench_next_man_up(sub_conn):
+    from ffr.draft.scoring import score_roster
+
+    # wk1: star 20 | wk2: AAA bye -> waiver rb_wav 10 (hand also on bye)
+    # wk3: injury (AAA played, star absent) -> bench only -> hand 15
+    total = score_roster(
+        sub_conn, ["rb_star"], ["rb_hand"], 2019,
+        drafted_ids={"rb_star", "rb_hand"},
+    )
+    assert total == pytest.approx(20 + 10 + 15)
+
+
+def test_injury_never_pulls_from_waivers(sub_conn):
+    from ffr.draft.scoring import score_roster
+
+    # no bench at all: wk2 bye -> waiver 10; wk3 injury -> slot scores 0
+    total = score_roster(
+        sub_conn, ["rb_star"], [], 2019, drafted_ids={"rb_star"}
+    )
+    assert total == pytest.approx(20 + 10 + 0)
+
+
+def test_bye_prefers_better_of_bench_and_waiver(sub_conn):
+    from ffr.draft.scoring import score_roster
+
+    # bench rb_b2 has ppg 2.0 after wk1; waiver rb_wav ppg 8.0 -> wk2 uses waiver
+    total = score_roster(
+        sub_conn, ["rb_star"], ["rb_b2"], 2019,
+        drafted_ids={"rb_star", "rb_b2"},
+    )
+    # wk3 injury: bench-only -> rb_b2 4
+    assert total == pytest.approx(20 + 10 + 4)
+
+
+def test_bench_player_covers_only_one_slot(sub_conn):
+    from ffr.draft.scoring import score_roster
+
+    # two injured starters, one bench player: only one slot covered in wk3
+    sub_conn.execute("INSERT INTO players VALUES ('rb_star2','Star Two','RB',2015,2026)")
+    sub_conn.execute("INSERT INTO player_seasons VALUES ('rb_star2',2019,'AAA','RB',16)")
+    sub_conn.execute("INSERT INTO weekly_points VALUES ('rb_star2',2019,1,18.0)")
+    sub_conn.commit()
+    total = score_roster(
+        sub_conn, ["rb_star", "rb_star2"], ["rb_hand"], 2019,
+        drafted_ids={"rb_star", "rb_star2", "rb_hand"},
+    )
+    # wk1: 20+18 | wk2: both on bye -> waivers: rb_wav 10 covers one, rb_b2 3 covers other
+    # wk3: both injured -> bench only -> hand 15 covers one, other slot 0
+    assert total == pytest.approx(38 + 13 + 15)

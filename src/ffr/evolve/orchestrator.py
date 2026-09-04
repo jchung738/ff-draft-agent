@@ -26,7 +26,7 @@ from ffr.data.season_meta import lock_date
 from ffr.draft.bots import ADPBot
 from ffr.draft.engine import DraftEngine
 from ffr.draft.pool import pool_from_prior_season, pool_from_rankings
-from ffr.draft.scoring import score_lineup
+from ffr.draft.scoring import score_lineup, score_roster
 
 console = Console()
 
@@ -205,21 +205,22 @@ class Orchestrator:
                     log_path=log_path,
                 )
                 engine.run(drafters)
-                for i in range(n_llm):
-                    scores[i][season] = score_lineup(self.conn, engine.lineups[i], season)
                 (gen_dir / f"_DONE_season_{season}").touch()
                 events = engine.events
-            # recover scores from log on resume
+            # score uniformly from the event log (works fresh and on resume)
+            all_picks = [e for e in events if e["type"] == "pick"]
+            drafted = {e["player_id"] for e in all_picks}
             for i in list(scores):
-                if season not in scores[i]:
-                    lineup = next(
-                        e["starters"] for e in events
-                        if e["type"] == "lineup" and e["team"] == i
-                    )
-                    scores[i][season] = score_lineup(self.conn, lineup, season)
-                pick_logs[i][season] = [
-                    e for e in events if e["type"] == "pick" and e["team"] == i
-                ]
+                starters = next(
+                    e["starters"] for e in events
+                    if e["type"] == "lineup" and e["team"] == i
+                )
+                team_picks = [e["player_id"] for e in all_picks if e["team"] == i]
+                bench = [p for p in team_picks if p not in starters]
+                scores[i][season] = score_roster(
+                    self.conn, starters, bench, season, drafted
+                )
+                pick_logs[i][season] = [e for e in all_picks if e["team"] == i]
 
         results = {
             "scores": {str(i): s for i, s in scores.items()},

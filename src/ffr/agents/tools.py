@@ -118,9 +118,11 @@ TOOLS: list[dict] = [
 SET_LINEUP_TOOL: dict = {
     "name": "set_lineup",
     "description": (
-        "Lock your starting lineup for the whole season: exactly 1 QB, 2 RB, 2 WR, "
-        "1 TE, 1 FLEX (RB/WR/TE), 1 K, 1 DST from your roster. Only these 9 players "
-        "will ever score points; bench scores nothing."
+        "Lock your starting lineup: exactly 1 QB, 2 RB, 2 WR, 1 TE, 1 FLEX "
+        "(RB/WR/TE), 1 K, 1 DST from your roster. Starters score weekly; when a "
+        "starter misses a game your best active bench player at the position "
+        "auto-covers (byes can also pull from waivers), so pick starters for "
+        "output and keep your best insurance on the bench."
     ),
     "input_schema": {
         "type": "object",

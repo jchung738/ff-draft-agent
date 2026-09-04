@@ -1,8 +1,9 @@
 # Draft Strategy
 
 ## Core principles
-- Bench players never score in this format: judge every pick by how it upgrades the
-  starting 9 (QB, 2 RB, 2 WR, TE, FLEX, K, DST).
+- Starters score weekly; when one misses a game your best active bench player at
+  the position auto-covers (byes can also stream from waivers). Judge early picks
+  by starter output and bench picks by expected fill-in value.
 - Value = projected points above the replacement-level starter still available at
   the position when you next pick. Scarcity at RB/WR matters more than raw points.
 - Use ADP as the market price. Take players falling meaningfully below ADP; avoid
@@ -11,9 +12,12 @@
 ## Round shape (adjust to how the draft breaks)
 - Rounds 1-5: lock in RB/WR starters; take an elite TE or QB only at a clear discount.
 - Rounds 6-9: fill remaining starters (QB, TE, FLEX) targeting upside profiles.
-- Rounds 10-13: bench = insurance ONLY for fragile starters; prefer upgrading
-  starter certainty over depth.
-- Last 2 rounds: K and DST, best available by ADP.
+- Rounds 10-13: bench earns points when starters miss games — prioritize
+  (a) handcuffs to your own fragile RBs, (b) high-upside players in ambiguous
+  roles who would start if pressed in, (c) insurance at positions where your
+  starters have injury history. Byes are auto-covered (waivers allowed), so
+  draft bench for injury coverage, not bye coverage.
+- Last 2 rounds: K and DST, best available by ADP (their byes auto-stream).
 
 ## Research policy (max tool calls are scarce)
 - Every pick: check get_available_players first.

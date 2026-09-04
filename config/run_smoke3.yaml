@@ -1,0 +1,23 @@
+# Smoke run for the speed architecture: parallel seasons, prep research,
+# prefetch, late-round budgets, reasoning/sources, scoring v3 (bench + waivers).
+run:
+  generations: 2
+  agents: 14
+  llm_agents: 14
+  seasons_per_generation: 2      # exercises parallel drafts live
+  train_seasons: [2016, 2017, 2018, 2019, 2020, 2021, 2022]
+  holdout_seasons: [2023, 2024]
+  drafter_model: claude-haiku-4-5
+  rewriter_model: claude-sonnet-4-6
+  auditor_model: claude-opus-4-8
+  max_tool_calls_per_pick: 6
+  late_round_start: 11
+  late_round_tool_calls: 2
+  prep_research: true
+  prep_tool_calls: 3
+  on_clock_tool_calls: 2
+  faller_threshold: 8
+  llm_rounds: 15
+  budget_usd: 30.0
+  seed: 43
+  audit_strip_threshold: 0.30

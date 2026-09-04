@@ -200,17 +200,36 @@ class LLMDrafter:
         tools: list[dict],
         done: Callable[[], bool],
         budget: int | None = None,
+        final_tool: str | None = None,
     ) -> None:
         messages: list[dict] = [{"role": "user", "content": user_prompt}]
         self._last_text = ""
-        for _ in range(budget or self.max_tool_calls):
+        limit = budget or self.max_tool_calls
+        params = _model_params(self.model)
+        for step in range(limit):
+            # On the last allowed call, force the decision tool: an agent may
+            # research until then, but it can never end its turn without acting.
+            # (Forced tool_choice is incompatible with thinking, so thinking
+            # models get a hard text nudge instead.)
+            extra = {}
+            if final_tool and step == limit - 1:
+                if "thinking" in params:
+                    nudge = f"FINAL CALL: you must call {final_tool} now — no more research."
+                    last = messages[-1]
+                    if isinstance(last["content"], list):
+                        last["content"].append({"type": "text", "text": nudge})
+                    else:
+                        last["content"] += "\n\n" + nudge
+                else:
+                    extra["tool_choice"] = {"type": "tool", "name": final_tool}
             response = self.client.messages.create(
                 model=self.model,
                 max_tokens=4000,
                 system=self._system(),
                 tools=tools,
                 messages=messages,
-                **_model_params(self.model),
+                **extra,
+                **params,
             )
             if self.on_usage:
                 self.on_usage(self.model, response.usage)
@@ -286,6 +305,7 @@ class LLMDrafter:
             dispatcher, prompt, TOOLS,
             done=lambda: dispatcher.pick_result is not None,
             budget=budget,
+            final_tool="make_pick",
         )
         # fall back to the agent's own commentary if it skipped the reasoning arg
         self.last_pick_reason = dispatcher.pick_reason or (
@@ -319,6 +339,7 @@ class LLMDrafter:
             prompt,
             TOOLS[:-1] + [SET_LINEUP_TOOL],  # research tools + set_lineup, no make_pick
             done=lambda: dispatcher.lineup_result is not None,
+            final_tool="set_lineup",
         )
         if dispatcher.lineup_result is None:
             raise RuntimeError("drafter did not set a lineup")  # engine auto-lineups

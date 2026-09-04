@@ -151,7 +151,7 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>ff-draft-agent
 <script>
 const $=id=>document.getElementById(id); let state=null;
 async function j(u){const r=await fetch(u);return r.json()}
-function opt(sel,vals,keep){const old=sel.value;sel.innerHTML='';vals.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o)});if(keep&&vals.includes(old))sel.value=old}
+function opt(sel,vals,keep){const old=sel.value;const svals=vals.map(String);sel.innerHTML='';svals.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o)});if(keep&&svals.includes(old))sel.value=old}
 async function refreshRuns(){const runs=await j('/api/runs');opt($('run'),runs,true);if(!$('run').value&&runs.length)$('run').value=runs[runs.length-1]}
 async function refreshState(){if(!$('run').value)return;state=await j('/api/run/'+$('run').value);
  opt($('gen'),state.generations.map(g=>g.gen),true);

@@ -16,6 +16,7 @@ run:
   prep_tool_calls: 3
   on_clock_tool_calls: 2
   faller_threshold: 8
+  extension_tool_calls: 3
   llm_rounds: 15             # rounds where the LLM picks; later rounds ADP auto-pick
   budget_usd: 25.0           # orchestrator halts cleanly past this
   seed: 42

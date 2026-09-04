@@ -239,6 +239,7 @@ class Orchestrator:
                     prep_tool_calls=self.cfg.get("prep_tool_calls", 3),
                     on_clock_tool_calls=self.cfg.get("on_clock_tool_calls", 2),
                     faller_threshold=self.cfg.get("faller_threshold", 8.0),
+                    extension_tool_calls=self.cfg.get("extension_tool_calls", 3),
                     on_usage=on_usage,
                     client=self.client,
                 )

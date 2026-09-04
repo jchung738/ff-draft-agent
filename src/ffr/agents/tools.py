@@ -105,6 +105,24 @@ TOOLS: list[dict] = [
         },
     },
     {
+        "name": "request_more_research",
+        "description": (
+            "If you are genuinely torn between players and your remaining tool "
+            "budget is not enough to resolve it, call this ONCE to be granted "
+            "extra research calls this pick. Do not use it routinely."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "dilemma": {
+                    "type": "string",
+                    "description": "One sentence: what you are torn between and why",
+                }
+            },
+            "required": ["dilemma"],
+        },
+    },
+    {
         "name": "make_pick",
         "description": "Draft a player by player_id. Ends your turn if the pick is legal.",
         "strict": True,  # API-enforced: reasoning always present (Haiku skips advisory 'required')
@@ -157,6 +175,7 @@ class ToolDispatcher:
     # research provenance for the current pick (auto-tracked, not model-claimed)
     searches: list[str] = None  # type: ignore[assignment]
     docs_read: list[dict] = None  # type: ignore[assignment]
+    extension_requested: str | None = None  # the stated dilemma, once per pick
 
     def __post_init__(self) -> None:
         self.searches = []
@@ -231,6 +250,11 @@ class ToolDispatcher:
                 {"player_id": p.player_id, "name": p.name, "position": p.position, "adp": p.adp}
                 for p in players[: min(args.get("limit", 25), 60)]
             ]
+        if name == "request_more_research":
+            if self.extension_requested is not None:
+                return {"granted": False, "note": "extension already used this pick"}
+            self.extension_requested = str(args.get("dilemma", ""))[:300]
+            return {"granted": True, "note": "extra research calls granted"}
         if name == "make_pick":
             pid = args["player_id"]
             player = self.engine.available.get(pid)

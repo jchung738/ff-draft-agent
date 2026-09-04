@@ -68,6 +68,26 @@ def test_on_clock_budget_and_faller_bump():
     assert d._pick_budget(12) == 2
 
 
+def test_extension_granted_once_per_pick(tmp_path):
+    from ffr.agents.tools import ToolDispatcher
+    from ffr.corpus.api import TimeLockedCorpus
+    from ffr.data.store import connect
+    from ffr.draft.engine import DraftEngine
+    from test_engine import make_pool
+
+    conn = connect(tmp_path / "t.sqlite")
+    corpus = TimeLockedCorpus(conn, 2023, "2023-09-06")
+    engine = DraftEngine(season=2023, pool=make_pool(), seed=1)
+    d = ToolDispatcher(corpus=corpus, engine=engine, team_idx=0)
+    import json
+
+    first, _ = d.dispatch("request_more_research", {"dilemma": "RB vs WR value"})
+    assert json.loads(first)["granted"] is True
+    assert d.extension_requested == "RB vs WR value"
+    second, _ = d.dispatch("request_more_research", {"dilemma": "again"})
+    assert json.loads(second)["granted"] is False  # once per pick
+
+
 def test_prep_tools_exclude_engine_and_pick():
     from ffr.agents.drafter import PREP_TOOLS
 

@@ -394,6 +394,7 @@ $('board').addEventListener('click',e=>{
  const esc=x=>String(x??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
  let b=`<h3>R${p.round} — ${esc(p.name)} <span class="muted">(${p.position}, adp ${p.adp??'?'}, agent ${p.team})</span></h3>`;
  b+=p.reason?`<div>${esc(p.reason)}</div>`:'<div class="muted">no stated reasoning</div>';
+ if(p.extension)b+=`<div class="src"><b>requested extra research:</b> ${esc(p.extension)}</div>`;
  if(p.sources){const s=p.sources;
   if(s.queries&&s.queries.length)b+=`<div class="src"><b>searched:</b> ${s.queries.map(esc).join(' · ')}</div>`;
   if(s.docs&&s.docs.length)b+=`<div class="src"><b>read:</b><br>${s.docs.map(d=>`[${esc(d.source)} ${esc(d.date)}] ${esc(d.title||d.url)}`).join('<br>')}</div>`}

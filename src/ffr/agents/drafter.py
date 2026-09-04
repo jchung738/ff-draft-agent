@@ -20,7 +20,8 @@ from ffr.draft.engine import DraftEngine
 
 # Corpus-only research tools (safe off-thread: never touch live engine state)
 PREP_TOOLS = [t for t in TOOLS if t["name"] not in
-              ("get_draft_state", "get_available_players", "make_pick")]
+              ("get_draft_state", "get_available_players", "make_pick",
+               "request_more_research")]
 
 ENGINE_RULES = """You are drafting a fantasy football team in a live 14-team snake draft.
 
@@ -94,11 +95,13 @@ class LLMDrafter:
     prep_tool_calls: int = 3
     on_clock_tool_calls: int = 2    # budget when a prep plan is in hand
     faller_threshold: float = 8.0   # ADP this far below the pick number = faller
+    extension_tool_calls: int = 3   # extra budget when the agent declares a dilemma
     on_usage: Callable[[str, object], None] | None = None  # (model, usage) -> None
     client: anthropic.Anthropic = field(default_factory=anthropic.Anthropic)
     notes: str = ""  # within-trial scratchpad, re-injected each pick (bounded)
     last_pick_reason: str | None = None   # engine reads these into the pick event
     last_pick_sources: dict | None = None  # auto-tracked research provenance
+    last_pick_extension: str | None = None  # dilemma stated for extra budget, if any
     _prep_thread: threading.Thread | None = field(default=None, repr=False)
     _prep_error: Exception | None = field(default=None, repr=False)
     _prep_sources: dict | None = field(default=None, repr=False)
@@ -204,15 +207,16 @@ class LLMDrafter:
     ) -> None:
         messages: list[dict] = [{"role": "user", "content": user_prompt}]
         self._last_text = ""
-        limit = budget or self.max_tool_calls
+        remaining = budget or self.max_tool_calls
+        extension_granted = False
         params = _model_params(self.model)
-        for step in range(limit):
+        while remaining > 0:
             # On the last allowed call, force the decision tool: an agent may
             # research until then, but it can never end its turn without acting.
             # (Forced tool_choice is incompatible with thinking, so thinking
             # models get a hard text nudge instead.)
             extra = {}
-            if final_tool and step == limit - 1:
+            if final_tool and remaining == 1:
                 if "thinking" in params:
                     nudge = f"FINAL CALL: you must call {final_tool} now — no more research."
                     last = messages[-1]
@@ -233,6 +237,7 @@ class LLMDrafter:
             )
             if self.on_usage:
                 self.on_usage(self.model, response.usage)
+            remaining -= 1
             texts = [b.text for b in response.content if b.type == "text" and b.text.strip()]
             if texts:
                 self._last_text = " ".join(texts)
@@ -254,6 +259,14 @@ class LLMDrafter:
             messages.append({"role": "user", "content": results})
             if done():
                 return
+            # a declared dilemma buys extra research calls, once per pick
+            if (
+                dispatcher.extension_requested is not None
+                and not extension_granted
+                and self.extension_tool_calls > 0
+            ):
+                extension_granted = True
+                remaining += self.extension_tool_calls
 
     # --- Drafter protocol ---------------------------------------------------
 
@@ -297,7 +310,8 @@ class LLMDrafter:
             )
         prompt += (
             f"You have at most {budget} tool calls this pick (make_pick included) — "
-            f"research only what the context above cannot tell you, then call make_pick."
+            f"research only what the context above cannot tell you, then call make_pick. "
+            f"If you are genuinely torn, request_more_research grants extra calls (once)."
         )
         if self.notes:
             prompt += f"\n\nYour prepared plan/notes:\n{self.notes[:2000]}"
@@ -319,6 +333,7 @@ class LLMDrafter:
             }
             self._prep_sources = None
         self.last_pick_sources = sources
+        self.last_pick_extension = dispatcher.extension_requested
         if dispatcher.pick_result is None:
             raise RuntimeError("drafter did not make a pick")  # engine auto-picks
         return dispatcher.pick_result

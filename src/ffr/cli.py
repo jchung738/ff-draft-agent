@@ -147,6 +147,10 @@ def main() -> None:
     p.add_argument("--trials", type=int, default=10)
     p.set_defaults(func=cmd_draft)
 
+    p = sub.add_parser("dash", help="local observer dashboard")
+    p.add_argument("--port", type=int, default=8787)
+    p.set_defaults(func=lambda a: __import__("ffr.dash", fromlist=["serve"]).serve(a.port))
+
     p = sub.add_parser("evolve", help="run the harness evolution loop")
     p.add_argument("--run-id", type=str, required=True)
     p.add_argument("--config", type=str, default=None, help="run config yaml")

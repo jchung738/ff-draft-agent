@@ -23,11 +23,12 @@ def cmd_ingest_stats(args: argparse.Namespace) -> None:
 
 def cmd_crawl_adp(args: argparse.Namespace) -> None:
     from ffr.data import store
-    from ffr.data.crawl import crawl_adp
+    from ffr.data.crawl import crawl_adp, crawl_ffc_adp
 
     conn = store.connect()
     for season in range(args.start, args.end + 1):
-        n = crawl_adp(conn, season)
+        n = crawl_adp(conn, season) if not args.ffc_only else 0
+        n += crawl_ffc_adp(conn, season)
         resolved = conn.execute(
             "SELECT COUNT(*) c FROM rankings WHERE season=? AND player_id IS NOT NULL",
             (season,),
@@ -81,16 +82,17 @@ def cmd_crawl_articles(args: argparse.Namespace) -> None:
 def cmd_draft(args: argparse.Namespace) -> None:
     """Run one bot-only draft on a real season and score it against ground truth."""
     from ffr.data import store
+    from ffr.data.season_meta import lock_date
     from ffr.draft.bots import ADPBot, RandomBot, VORBot
     from ffr.draft.engine import DraftEngine
-    from ffr.draft.pool import pool_from_prior_season
+    from ffr.draft.pool import pool_from_rankings
     from ffr.draft.scoring import score_lineup
 
     conn = store.connect()
     kinds = {"vor": VORBot, "adp": ADPBot}
     results: dict[str, list[float]] = {"vor": [], "adp": [], "random": []}
     for seed in range(args.trials):
-        pool = pool_from_prior_season(conn, args.season)
+        pool = pool_from_rankings(conn, args.season, lock_date(conn, args.season))
         engine = DraftEngine(season=args.season, pool=pool, seed=seed)
         labels = ["vor"] * 5 + ["adp"] * 5 + ["random"] * 4
         drafters = [
@@ -121,9 +123,10 @@ def main() -> None:
     p.add_argument("--end", type=int, default=2025)
     p.set_defaults(func=cmd_ingest_stats)
 
-    p = sub.add_parser("crawl-adp", help="ingest FantasyPros ADP via Wayback")
+    p = sub.add_parser("crawl-adp", help="ingest FantasyPros (Wayback) + FFC (API) ADP")
     p.add_argument("--start", type=int, default=2015)
     p.add_argument("--end", type=int, default=2025)
+    p.add_argument("--ffc-only", action="store_true")
     p.set_defaults(func=cmd_crawl_adp)
 
     p = sub.add_parser("resolve", help="re-resolve unresolved ranking names")

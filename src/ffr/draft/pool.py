@@ -49,11 +49,10 @@ def pool_from_prior_season(conn: sqlite3.Connection, season: int) -> list[PoolPl
     return kept
 
 
-def pool_from_rankings(
-    conn: sqlite3.Connection, season: int, lock_date: str, source: str = "fantasypros"
-) -> list[PoolPlayer]:
-    """Pool from the latest pre-lock ADP snapshot (available after Phase 2)."""
-    rows = conn.execute(
+def _rankings_rows(
+    conn: sqlite3.Connection, season: int, lock_date: str, source: str
+) -> list:
+    return conn.execute(
         """SELECT r.player_id, p.display_name,
                   COALESCE(s.position, p.position) AS position,
                   r.adp, r.rank,
@@ -70,13 +69,44 @@ def pool_from_rankings(
            ORDER BY r.rank""",
         (season, season, season, source, season, source, lock_date),
     ).fetchall()
-    return [
-        PoolPlayer(
-            player_id=r["player_id"],
-            name=r["display_name"],
-            position=r["position"],
-            adp=r["adp"] if r["adp"] is not None else float(r["rank"]),
-            proj=r["prior_pts"],
-        )
-        for r in rows
-    ]
+
+
+# 14 teams x 15 rounds = 210 picks; keep headroom so the board never empties.
+_MIN_POOL = 260
+
+
+def pool_from_rankings(
+    conn: sqlite3.Connection, season: int, lock_date: str
+) -> list[PoolPlayer]:
+    """Draft pool from the latest pre-lock ADP snapshots.
+
+    FantasyPros first, FFC fills players FP lacks, prior-season ground truth
+    backstops so the pool always covers a full 210-pick draft.
+    """
+    pool: list[PoolPlayer] = []
+    seen: set[str] = set()
+    for source in ("fantasypros", "ffc"):
+        for r in _rankings_rows(conn, season, lock_date, source):
+            if r["player_id"] in seen or r["position"] not in _TOP_N:
+                continue
+            seen.add(r["player_id"])
+            pool.append(
+                PoolPlayer(
+                    player_id=r["player_id"],
+                    name=r["display_name"],
+                    position=r["position"],
+                    adp=r["adp"] if r["adp"] is not None else float(r["rank"]),
+                    proj=r["prior_pts"],
+                )
+            )
+    if len(pool) < _MIN_POOL:
+        backstop_adp = max((p.adp for p in pool), default=0.0) + 50
+        for p in pool_from_prior_season(conn, season):
+            if p.player_id not in seen:
+                seen.add(p.player_id)
+                pool.append(
+                    PoolPlayer(p.player_id, p.name, p.position, backstop_adp + p.adp, p.proj)
+                )
+            if len(pool) >= _MIN_POOL:
+                break
+    return sorted(pool, key=lambda p: p.adp)

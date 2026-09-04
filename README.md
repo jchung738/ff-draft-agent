@@ -23,7 +23,13 @@ uv sync --extra dev
 uv run pytest
 uv run ffr ingest-stats            # nflverse players + weekly half-PPR points
 uv run ffr draft --season 2022     # bot-only sanity draft
+uv run ffr crawl-adp               # FantasyPros ADP snapshots via Wayback (2015-2025)
+uv run ffr crawl-articles --sources espn,nfl_com --start 2022 --end 2023
+uv run ffr resolve                 # re-resolve unmatched player names, print report
+ANTHROPIC_API_KEY=... uv run ffr evolve --run-id run001   # the evolution loop
 ```
+Evolution runs are configured in `config/run_default.yaml` (models, seasons per
+generation, USD budget — the run halts cleanly at budget and resumes from disk).
 Behind a TLS-intercepting proxy, build `data/ca_bundle.pem` (certifi + macOS keychain);
 `ffr` picks it up automatically.
 

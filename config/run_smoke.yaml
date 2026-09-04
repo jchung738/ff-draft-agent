@@ -1,0 +1,16 @@
+# Phase 4 smoke run: cheap end-to-end validation of the evolution loop.
+run:
+  generations: 3
+  agents: 14
+  llm_agents: 14
+  seasons_per_generation: 1
+  train_seasons: [2016, 2017, 2018, 2019, 2020, 2021, 2022]
+  holdout_seasons: [2023, 2024]
+  drafter_model: claude-haiku-4-5
+  rewriter_model: claude-sonnet-4-6
+  auditor_model: claude-opus-4-8
+  max_tool_calls_per_pick: 6
+  llm_rounds: 15
+  budget_usd: 20.0
+  seed: 42
+  audit_strip_threshold: 0.30

@@ -108,9 +108,12 @@ def cmd_draft(args: argparse.Namespace) -> None:
 
 
 def cmd_evolve(args: argparse.Namespace) -> None:
+    from pathlib import Path
+
     from ffr.evolve.orchestrator import Orchestrator
 
-    Orchestrator(args.run_id).run()
+    config = Path(args.config) if args.config else None
+    Orchestrator(args.run_id, config_path=config).run()
 
 
 def main() -> None:
@@ -146,6 +149,7 @@ def main() -> None:
 
     p = sub.add_parser("evolve", help="run the harness evolution loop")
     p.add_argument("--run-id", type=str, required=True)
+    p.add_argument("--config", type=str, default=None, help="run config yaml")
     p.set_defaults(func=cmd_evolve)
 
     args = parser.parse_args()

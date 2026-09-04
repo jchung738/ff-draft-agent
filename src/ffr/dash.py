@@ -63,7 +63,18 @@ def _run_state(run_id: str) -> dict:
             int(p.stem.split("_")[1])
             for p in (d / "harnesses").glob("agent_*.md")
         ) if (d / "harnesses").exists() else []
-        gens.append({"gen": g, "results": results, "drafts": drafts, "agents": agents})
+        if results:
+            rewrite_done = (_gen_dir(run_id, g + 1) / "_DONE_rewrite").exists()
+            phase = "complete" if rewrite_done else "rewriting harnesses"
+        elif (d / "_DONE_audit").exists():
+            phase = "drafting" if drafts else "starting draft"
+        elif agents:
+            phase = "auditing harnesses"
+        else:
+            phase = "pending"
+        gens.append(
+            {"gen": g, "results": results, "drafts": drafts, "agents": agents, "phase": phase}
+        )
 
     conn = store.connect()
     costs = [
@@ -181,7 +192,10 @@ async function refreshRuns(){const runs=await j('/api/runs');opt($('run'),runs,t
 async function refreshState(){if(!$('run').value)return;state=await j('/api/run/'+$('run').value);
  opt($('gen'),state.generations.map(g=>g.gen),true);
  const g=state.generations.find(x=>String(x.gen)===$('gen').value)||state.generations[state.generations.length-1];
- if(g){$('gen').value=g.gen;opt($('season'),g.drafts,true);opt($('agent'),g.agents,true);opt($('logteam'),g.agents,true)}
+ if(g){$('gen').value=g.gen;opt($('season'),g.drafts,true);opt($('agent'),g.agents,true);opt($('logteam'),g.agents,true);
+  $('status').textContent='gen '+g.gen+': '+(g.phase||'');
+  if(!g.drafts.length){$('board').innerHTML=`<tr><td style="padding:14px" class="muted">no draft yet for generation ${g.gen} — ${g.phase}. The board fills in when its draft starts.</td></tr>`;
+   $('live').textContent='';$('teamlog').innerHTML='<span class="muted">available once this generation drafts</span>'}}
  $('cost').textContent='spend $'+state.total_usd;
  renderCosts();renderTrajectory();renderStandings()}
 function renderCosts(){const t=$('costs');t.innerHTML='<tr><th>phase</th><th>model</th><th>calls</th><th>input</th><th>cache-read</th><th>output</th><th>usd</th></tr>';
@@ -268,7 +282,7 @@ async function refreshHarness(){if(!$('run').value||$('agent').value==='')return
    if(l.startsWith('-'))return `<span class="ddel">${esc}</span>`;
    if(l.startsWith('@@'))return `<span class="dhead">${esc}</span>`;return esc}).join('\\n')}
  else{el.textContent=h.text}}
-async function tick(){try{await refreshRuns();await refreshState();await refreshDraft();await refreshTeamlog();await refreshHarness();$('status').textContent=''}catch(e){$('status').textContent='… '+e}}
+async function tick(){try{await refreshRuns();await refreshState();await refreshDraft();await refreshTeamlog();await refreshHarness()}catch(e){$('status').textContent='… '+e}}
 ['run','gen','season','agent','logteam','showdiff'].forEach(id=>$(id).addEventListener('change',tick));
 tick();setInterval(tick,3000);
 </script></body></html>"""

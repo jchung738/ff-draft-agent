@@ -94,6 +94,21 @@ def test_autopick_and_autolineup_fallback():
     assert ok
 
 
+class ReasoningBot(ADPBot):
+    last_pick_reason = "value fell to me"
+    last_pick_sources = {"queries": ["q"], "docs": []}
+
+
+def test_pick_reason_survives_legality_check():
+    """Regression: can_add's (ok, '') return must not clobber the agent's reasoning."""
+    drafters = [ReasoningBot()] + [ADPBot() for _ in range(13)]
+    engine = DraftEngine(season=2023, pool=make_pool(), seed=5)
+    engine.run(drafters)
+    my_picks = [e for e in engine.events if e["type"] == "pick" and e["team"] == 0]
+    assert all(e["reason"] == "value fell to me" for e in my_picks)
+    assert all(e["sources"] == {"queries": ["q"], "docs": []} for e in my_picks)
+
+
 def test_vor_beats_random_on_projections():
     """VOR drafting should assemble higher-projected lineups than random picks."""
 

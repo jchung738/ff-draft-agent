@@ -122,9 +122,9 @@ class DraftEngine:
             if player is None:
                 forfeited = f"invalid or taken player_id: {pid}"
                 continue
-            ok, reason = roster.can_add(player.ref())
+            ok, why_illegal = roster.can_add(player.ref())
             if not ok:
-                forfeited = f"illegal pick {pid}: {reason}"
+                forfeited = f"illegal pick {pid}: {why_illegal}"
                 continue
             chosen, forfeited = player, None
             break

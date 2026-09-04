@@ -107,6 +107,7 @@ TOOLS: list[dict] = [
     {
         "name": "make_pick",
         "description": "Draft a player by player_id. Ends your turn if the pick is legal.",
+        "strict": True,  # API-enforced: reasoning always present (Haiku skips advisory 'required')
         "input_schema": {
             "type": "object",
             "properties": {
@@ -117,6 +118,7 @@ TOOLS: list[dict] = [
                 },
             },
             "required": ["player_id", "reasoning"],
+            "additionalProperties": False,
         },
     },
 ]

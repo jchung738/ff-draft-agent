@@ -12,11 +12,13 @@
 ## Round shape (adjust to how the draft breaks)
 - Rounds 1-5: lock in RB/WR starters; take an elite TE or QB only at a clear discount.
 - Rounds 6-9: fill remaining starters (QB, TE, FLEX) targeting upside profiles.
-- Rounds 10-13: bench earns points when starters miss games — prioritize
-  (a) handcuffs to your own fragile RBs, (b) high-upside players in ambiguous
-  roles who would start if pressed in, (c) insurance at positions where your
-  starters have injury history. Byes are auto-covered (waivers allowed), so
-  draft bench for injury coverage, not bye coverage.
+- Rounds 10-13: bench earns points two ways — coverage when starters miss
+  games, and PROMOTION when a bench player's recent form beats a starter's.
+  Prioritize (a) breakout candidates whose role could grow mid-season (rookies
+  behind aging starters, ascending #2 receivers), (b) handcuffs to your own
+  fragile RBs, (c) insurance at positions with injury history. Byes are
+  auto-covered (waivers allowed), so draft bench for upside and injury
+  coverage, not bye coverage.
 - Last 2 rounds: K and DST, best available by ADP (any K/DST absence
   auto-streams from waivers, so never insure those slots).
 

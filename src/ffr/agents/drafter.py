@@ -34,6 +34,11 @@ League settings:
   * INJURY/INACTIVE: if a starter misses a game, your best active BENCH player
     at that position automatically covers the slot that week. Handcuffs and
     bench depth therefore have real value.
+  * PROMOTION: a bench player whose recent form clearly beats a starter's
+    (last-3-games PPG, +20% and +2 pts) automatically TAKES the starting slot
+    until outplayed. Drafting a late-season breakout to your bench captures
+    his breakout — stashing upside is a real strategy. Waiver players never
+    promote: only players you drafted can earn a slot.
   * BYE weeks: the slot is covered by the best of your bench OR the best
     available waiver (undrafted) player, so byes are survivable.
   * K/DST: any absence (bye or injury) auto-streams from waivers, so never

@@ -1,0 +1,61 @@
+# Half-PPR scoring rules and per-season week windows.
+scoring:
+  pass_yd: 0.04
+  pass_td: 4.0
+  interception: -2.0
+  rush_yd: 0.1
+  rec_yd: 0.1
+  rush_td: 6.0
+  rec_td: 6.0
+  reception: 0.5
+  fumble_lost: -2.0
+  two_point: 2.0
+  # Kicker
+  fg_0_39: 3.0
+  fg_40_49: 4.0
+  fg_50_plus: 5.0
+  fg_miss: -1.0
+  xp_made: 1.0
+  xp_miss: -1.0
+
+# DST tiers: points allowed -> fantasy points
+dst:
+  sack: 1.0
+  interception: 2.0
+  fumble_recovery: 2.0
+  td: 6.0
+  safety: 2.0
+  points_allowed_tiers:
+    - [0, 0, 10.0]     # min_pa, max_pa, points
+    - [1, 6, 7.0]
+    - [7, 13, 4.0]
+    - [14, 20, 1.0]
+    - [21, 27, 0.0]
+    - [28, 34, -1.0]
+    - [35, 99, -4.0]
+
+# Regular season scoring window per season era.
+# The FINAL regular-season week is always excluded from ground truth
+# ("fantasy championship ends before the last week").
+week_windows:
+  # season range [start, end], first scored week, last scored week
+  - seasons: [2015, 2020]   # 16-game era: weeks 1-16 scored, wk 17 excluded
+    first_week: 1
+    last_week: 16
+  - seasons: [2021, 2035]   # 17-game era: weeks 1-17 scored, wk 18 excluded
+    first_week: 1
+    last_week: 17
+
+lineup:
+  teams: 14
+  rounds: 15
+  slots:
+    QB: 1
+    RB: 2
+    WR: 2
+    TE: 1
+    FLEX: 1        # RB/WR/TE
+    K: 1
+    DST: 1
+  bench: 6
+  flex_positions: [RB, WR, TE]

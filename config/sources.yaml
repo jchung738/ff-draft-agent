@@ -1,0 +1,101 @@
+# Crawl sources. Each entry drives the generic Wayback CDX -> fetch -> extract pipeline.
+# `rankings_patterns` pages additionally go through the named structured parser.
+# Patterns are CDX url globs (no scheme).
+sources:
+  fantasypros:
+    domain: fantasypros.com
+    article_patterns: ["www.fantasypros.com/2*"]
+    rankings_patterns:
+      - "www.fantasypros.com/nfl/rankings/half-point-ppr-cheatsheets.php*"
+      - "www.fantasypros.com/nfl/rankings/half-point-ppr-*"
+      - "www.fantasypros.com/nfl/adp/half-point-ppr-overall.php*"
+      - "www.fantasypros.com/nfl/adp/overall.php*"
+    parser: fantasypros
+  espn:
+    domain: espn.com
+    article_patterns: ["www.espn.com/fantasy/football/story*", "www.espn.com/fantasy/football/insider/story*"]
+  nfl_com:
+    domain: nfl.com
+    article_patterns: ["www.nfl.com/news/*"]
+  yahoo:
+    domain: sports.yahoo.com
+    article_patterns: ["sports.yahoo.com/fantasy*", "sports.yahoo.com/news/*fantasy*"]
+  cbs:
+    domain: cbssports.com
+    article_patterns: ["www.cbssports.com/fantasy/football/news/*"]
+  nbc_edge:
+    domain: nbcsports.com
+    article_patterns: ["www.nbcsports.com/fantasy/football/*", "www.nbcsports.com/edge/article/*"]
+  rotoworld:
+    domain: rotoworld.com
+    article_patterns: ["www.rotoworld.com/football/nfl/*"]
+  pff:
+    domain: pff.com
+    article_patterns: ["www.pff.com/news/fantasy*", "www.pff.com/fantasy*"]
+  rotoballer:
+    domain: rotoballer.com
+    article_patterns: ["www.rotoballer.com/*", "rotoballer.com/*"]
+  footballguys:
+    domain: footballguys.com
+    article_patterns: ["www.footballguys.com/article*"]
+  sharp_football:
+    domain: sharpfootballanalysis.com
+    article_patterns: ["www.sharpfootballanalysis.com/fantasy/*"]
+  draft_sharks:
+    domain: draftsharks.com
+    article_patterns: ["www.draftsharks.com/article/*"]
+  fantasy_footballers:
+    domain: thefantasyfootballers.com
+    article_patterns: ["www.thefantasyfootballers.com/articles/*"]
+  the_athletic:
+    domain: theathletic.com
+    article_patterns: ["theathletic.com/*fantasy*"]
+  si_fantasy:
+    domain: si.com
+    article_patterns: ["www.si.com/fantasy/*"]
+  fantasy_alarm:
+    domain: fantasyalarm.com
+    article_patterns: ["www.fantasyalarm.com/articles/*"]
+  walter_football:
+    domain: walterfootball.com
+    article_patterns: ["walterfootball.com/fantasy*"]
+  fftoday:
+    domain: fftoday.com
+    article_patterns: ["www.fftoday.com/articles/*"]
+  fantasy_guru:
+    domain: fantasyguru.com
+    article_patterns: ["www.fantasyguru.com/*"]
+  dynasty_league_football:
+    domain: dynastyleaguefootball.com
+    article_patterns: ["dynastyleaguefootball.com/*"]
+  fantasy_data:
+    domain: fantasydata.com
+    article_patterns: ["fantasydata.com/nfl/fantasy-football-*"]
+  numberfire:
+    domain: numberfire.com
+    article_patterns: ["www.numberfire.com/nfl/news/*"]
+  four_for_four:
+    domain: 4for4.com
+    article_patterns: ["www.4for4.com/*"]
+  pro_football_focus_news:
+    domain: profootballnetwork.com
+    article_patterns: ["www.profootballnetwork.com/fantasy*"]
+  bleacher_report:
+    domain: bleacherreport.com
+    article_patterns: ["bleacherreport.com/articles/*"]
+  usa_today_ftw:
+    domain: fantasyfootballcalculator.com
+    article_patterns: ["fantasyfootballcalculator.com/articles/*"]
+    rankings_patterns: ["fantasyfootballcalculator.com/adp*"]
+  rotowire:
+    domain: rotowire.com
+    article_patterns: ["www.rotowire.com/football/*"]
+  fantasy_index:
+    domain: fantasyindex.com
+    article_patterns: ["fantasyindex.com/*"]
+  razzball:
+    domain: football.razzball.com
+    article_patterns: ["football.razzball.com/*"]
+  fake_teams:
+    domain: faketeams.com
+    article_patterns: ["www.faketeams.com/nfl-fantasy-football*"]

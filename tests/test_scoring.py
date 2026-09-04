@@ -128,15 +128,20 @@ def sub_conn(tmp_path):
 
 
 def test_injury_uses_bench_next_man_up(sub_conn):
-    from ffr.draft.scoring import score_roster
+    from ffr.draft.scoring import simulate_roster
 
     # wk1: star 20 | wk2: AAA bye -> waiver rb_wav 10 (hand also on bye)
     # wk3: injury (AAA played, star absent) -> bench only -> hand 15
-    total = score_roster(
+    sim = simulate_roster(
         sub_conn, ["rb_star"], ["rb_hand"], 2019,
         drafted_ids={"rb_star", "rb_hand"},
     )
-    assert total == pytest.approx(20 + 10 + 15)
+    assert sim["total"] == pytest.approx(20 + 10 + 15)
+    wk2, wk3 = sim["weeks"][1]["slots"][0], sim["weeks"][2]["slots"][0]
+    assert wk2["occupant"] == "rb_wav" and wk2["sub"] == {"cause": "bye", "from": "waiver"}
+    assert wk3["occupant"] == "rb_hand" and wk3["sub"] == {"cause": "injury", "from": "bench"}
+    assert sim["players"]["rb_hand"]["role"] == "bench"
+    assert sim["players"]["rb_star"]["weekly"] == {1: 20.0}
 
 
 def test_injury_never_pulls_from_waivers(sub_conn):

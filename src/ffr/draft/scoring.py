@@ -78,15 +78,17 @@ def _assign_slots(
     return out
 
 
-def score_roster(
+def simulate_roster(
     conn: sqlite3.Connection,
     starter_ids: list[str],
     bench_ids: list[str],
     season: int,
     drafted_ids: set[str] | None = None,
-) -> float:
-    """Weekly scoring with bench substitution + bye-week waiver streaming.
+) -> dict:
+    """Weekly simulation with bench substitution + bye-week waiver streaming.
 
+    Returns the full season trace: per-week slot occupants (with substitution
+    cause and source), weekly totals, and every rostered player's weekly points.
     bench_ids must be in draft order. drafted_ids = every rostered player in
     the league (defines the waiver pool); defaults to starters+bench only.
     """
@@ -112,19 +114,24 @@ def score_roster(
         return c[0] / c[1] if c and c[1] else -1.0
 
     total = 0.0
+    weeks: list[dict] = []
     for week in range(win.first_week, win.last_week + 1):
         used: set[str] = set()
+        week_total = 0.0
+        slot_rows: list[dict] = []
         for slot, starter in slots:
             occupant = None
+            sub = None
             if (starter, week) in pts:
                 occupant = starter
             else:
+                cause = "bye" if on_bye(starter, week) else "injury"
                 eligible = cfg.flex_positions if slot == "FLEX" else (slot,)
                 candidates = [
                     b for b in bench_ids
                     if b not in used and pos_of(b) in eligible and (b, week) in pts
                 ]
-                if on_bye(starter, week):
+                if cause == "bye":
                     # bye: waivers are fair game too (undrafted, active this week)
                     candidates += [
                         pid for (pid, wk) in pts
@@ -138,12 +145,72 @@ def score_roster(
                         candidates,
                         key=lambda p: (ppg(p), -draft_index.get(p, 10_000)),
                     )
+                    sub = {
+                        "cause": cause,
+                        "from": "bench" if occupant in draft_index else "waiver",
+                    }
+                else:
+                    sub = {"cause": cause, "from": "none"}
+            points = pts.get((occupant, week), 0.0) if occupant else 0.0
             if occupant is not None:
                 used.add(occupant)
-                total += pts[(occupant, week)]
+                week_total += points
+            slot_rows.append(
+                {
+                    "slot": slot,
+                    "starter": starter,
+                    "occupant": occupant,
+                    "points": round(points, 2),
+                    "sub": sub,
+                }
+            )
+        total += week_total
+        weeks.append({"week": week, "total": round(week_total, 2), "slots": slot_rows})
         for (pid, wk), val in pts.items():  # update PPG after scoring the week
             if wk == week:
                 c = cum.setdefault(pid, [0.0, 0])
                 c[0] += val
                 c[1] += 1
-    return round(total, 2)
+
+    roster_ids = list(dict.fromkeys(starter_ids + bench_ids))
+    occupant_ids = {
+        s["occupant"] for w in weeks for s in w["slots"] if s["occupant"]
+    }
+    all_ids = list(dict.fromkeys(roster_ids + sorted(occupant_ids)))
+    names = {
+        r["player_id"]: r["display_name"]
+        for r in conn.execute(
+            f"""SELECT player_id, display_name FROM players
+                WHERE player_id IN ({",".join("?" * len(all_ids))})""",
+            all_ids,
+        )
+    } if all_ids else {}
+    players = {
+        pid: {
+            "name": names.get(pid, pid),
+            "position": pos_of(pid),
+            "role": "starter" if pid in starter_ids else "bench",
+            "weekly": {
+                wk: round(pts[(pid, wk)], 2)
+                for wk in range(win.first_week, win.last_week + 1)
+                if (pid, wk) in pts
+            },
+        }
+        for pid in roster_ids
+    }
+    return {
+        "total": round(total, 2),
+        "weeks": weeks,
+        "players": players,
+        "names": names,
+    }
+
+
+def score_roster(
+    conn: sqlite3.Connection,
+    starter_ids: list[str],
+    bench_ids: list[str],
+    season: int,
+    drafted_ids: set[str] | None = None,
+) -> float:
+    return simulate_roster(conn, starter_ids, bench_ids, season, drafted_ids)["total"]

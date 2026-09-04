@@ -94,6 +94,28 @@ def _draft(run_id: str, gen: int, season: str) -> dict:
     }
 
 
+def _teamlog(run_id: str, gen: int, season: str, team: int) -> dict:
+    """Full season simulation trace for one team's drafted roster."""
+    from ffr.draft.scoring import simulate_roster
+
+    events = _json_lines(_gen_dir(run_id, gen) / "drafts" / f"{season}.jsonl")
+    lineup = next(
+        (e for e in events if e["type"] == "lineup" and e["team"] == team), None
+    )
+    if lineup is None:
+        return {"ready": False}
+    all_picks = [e for e in events if e["type"] == "pick"]
+    starters = lineup["starters"]
+    team_picks = [e["player_id"] for e in all_picks if e["team"] == team]
+    bench = [p for p in team_picks if p not in starters]
+    drafted = {e["player_id"] for e in all_picks}
+    conn = store.connect()
+    sim = simulate_roster(conn, starters, bench, int(season), drafted)
+    conn.close()
+    sim["ready"] = True
+    return sim
+
+
 def _harness(run_id: str, gen: int, agent: int) -> dict:
     d = _gen_dir(run_id, gen) / "harnesses"
     f = d / f"agent_{agent:02d}.md"
@@ -144,6 +166,8 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>ff-draft-agent
   <div class="card" style="flex:1;min-width:340px"><h2>Standings (this gen)</h2><table id="standings"></table></div>
   <div class="card" style="flex:1;min-width:340px"><h2>Mean rank by generation (lineages)</h2><table id="trajectory"></table></div>
  </div>
+ <div class="card"><h2>Team season log — agent <select id="logteam"></select></h2>
+  <div id="teamlog"></div></div>
  <div class="card"><h2>Harness — agent <select id="agent"></select>
    <label><input type="checkbox" id="showdiff" checked> diff vs prev gen</label></h2>
   <div id="auditnote" class="muted"></div><pre id="harness"></pre></div>
@@ -157,7 +181,7 @@ async function refreshRuns(){const runs=await j('/api/runs');opt($('run'),runs,t
 async function refreshState(){if(!$('run').value)return;state=await j('/api/run/'+$('run').value);
  opt($('gen'),state.generations.map(g=>g.gen),true);
  const g=state.generations.find(x=>String(x.gen)===$('gen').value)||state.generations[state.generations.length-1];
- if(g){$('gen').value=g.gen;opt($('season'),g.drafts,true);opt($('agent'),g.agents,true)}
+ if(g){$('gen').value=g.gen;opt($('season'),g.drafts,true);opt($('agent'),g.agents,true);opt($('logteam'),g.agents,true)}
  $('cost').textContent='spend $'+state.total_usd;
  renderCosts();renderTrajectory();renderStandings()}
 function renderCosts(){const t=$('costs');t.innerHTML='<tr><th>phase</th><th>model</th><th>calls</th><th>input</th><th>cache-read</th><th>output</th><th>usd</th></tr>';
@@ -192,6 +216,37 @@ async function refreshDraft(){if(!$('run').value||$('season').value==='')return;
   html+='</tr>'}
  t.innerHTML=html}
 function nextCell(d){const n=d.picks.length;const r=Math.floor(n/14)+1;const idx=n%14;const s=(r%2===1)?idx:13-idx;return r+'-'+s}
+async function refreshTeamlog(){if(!$('run').value||$('logteam').value===''||$('season').value==='')return;
+ const t=await j('/api/run/'+$('run').value+'/teamlog/'+$('gen').value+'/'+$('season').value+'/'+$('logteam').value);
+ const el=$('teamlog');
+ if(!t.ready){el.innerHTML='<span class="muted">draft not finished — log appears when lineups lock</span>';return}
+ const nm=pid=>t.names[pid]||pid;
+ // weekly lineup table
+ let html='<div style="overflow:auto"><table><tr><th>wk</th>';
+ t.weeks[0].slots.forEach(s=>html+=`<th>${s.slot}</th>`);html+='<th>total</th></tr>';
+ t.weeks.forEach(w=>{html+=`<tr><td>${w.week}</td>`;
+  w.slots.forEach(s=>{
+   if(!s.occupant){html+=`<td class="muted" title="${s.sub?nm(s.starter)+' out ('+s.sub.cause+'), no replacement':''}">—</td>`;return}
+   const subbed=s.occupant!==s.starter;
+   const style=subbed?(s.sub.cause==='bye'?'background:#1d3a52':'background:#4a2525'):'';
+   const tip=subbed?` title="in for ${nm(s.starter)} (${s.sub.cause}) — from ${s.sub.from}"`:'';
+   html+=`<td style="${style}"${tip}>${nm(s.occupant)}<br><span class="adp">${s.points}</span></td>`});
+  html+=`<td><b>${w.total}</b></td></tr>`});
+ html+='</table></div>';
+ // roster moves list
+ const moves=[];t.weeks.forEach(w=>w.slots.forEach(s=>{
+  if(s.occupant&&s.occupant!==s.starter)moves.push(`wk ${w.week}: ${s.slot} — ${nm(s.starter)} out (${s.sub.cause}) → ${nm(s.occupant)} [${s.sub.from}] ${s.points} pts`);
+  if(!s.occupant&&s.sub)moves.push(`wk ${w.week}: ${s.slot} — ${nm(s.starter)} out (${s.sub.cause}) → no eligible replacement, 0 pts`)}));
+ html+='<h2 style="margin-top:12px">Roster moves</h2>'+(moves.length?'<pre style="max-height:200px">'+moves.join('\\n')+'</pre>':'<span class="muted">none — every starter played every week</span>');
+ // player-by-week grid
+ const wks=t.weeks.map(w=>w.week);
+ html+='<h2 style="margin-top:12px">Player season grid</h2><div style="overflow:auto"><table><tr><th>player</th><th>role</th>'+wks.map(w=>`<th>${w}</th>`).join('')+'<th>total</th></tr>';
+ Object.entries(t.players).forEach(([pid,p])=>{
+  const tot=Object.values(p.weekly).reduce((a,b)=>a+b,0).toFixed(1);
+  html+=`<tr><td>${p.name}</td><td class="muted">${p.position||''} ${p.role}</td>`+
+   wks.map(w=>{const v=p.weekly[w];return `<td class="${v===undefined?'muted':''}">${v===undefined?'·':v}</td>`}).join('')+`<td><b>${tot}</b></td></tr>`});
+ html+='</table></div>';
+ el.innerHTML=html}
 async function refreshHarness(){if(!$('run').value||$('agent').value==='')return;
  const h=await j('/api/run/'+$('run').value+'/harness/'+$('gen').value+'/'+$('agent').value);
  $('auditnote').textContent=h.audit?('audit: '+JSON.stringify(h.audit.llm?.violations?.length??0)+' violations flagged'):'';
@@ -202,8 +257,8 @@ async function refreshHarness(){if(!$('run').value||$('agent').value==='')return
    if(l.startsWith('-'))return `<span class="ddel">${esc}</span>`;
    if(l.startsWith('@@'))return `<span class="dhead">${esc}</span>`;return esc}).join('\\n')}
  else{el.textContent=h.text}}
-async function tick(){try{await refreshRuns();await refreshState();await refreshDraft();await refreshHarness();$('status').textContent=''}catch(e){$('status').textContent='… '+e}}
-['run','gen','season','agent','showdiff'].forEach(id=>$(id).addEventListener('change',tick));
+async function tick(){try{await refreshRuns();await refreshState();await refreshDraft();await refreshTeamlog();await refreshHarness();$('status').textContent=''}catch(e){$('status').textContent='… '+e}}
+['run','gen','season','agent','logteam','showdiff'].forEach(id=>$(id).addEventListener('change',tick));
 tick();setInterval(tick,3000);
 </script></body></html>"""
 
@@ -241,6 +296,11 @@ class Handler(BaseHTTPRequestHandler):
                 if not _SAFE.match(season):
                     return self._json({"error": "bad season"})
                 return self._json(_draft(run_id, gen, season))
+            if parts[3] == "teamlog":
+                gen, season, team = int(parts[4]), parts[5], int(parts[6])
+                if not _SAFE.match(season):
+                    return self._json({"error": "bad season"})
+                return self._json(_teamlog(run_id, gen, season, team))
             if parts[3] == "harness":
                 return self._json(_harness(run_id, int(parts[4]), int(parts[5])))
             return self._json({"error": "unknown endpoint"})

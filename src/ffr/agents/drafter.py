@@ -82,7 +82,8 @@ class LLMDrafter:
     on_usage: Callable[[str, object], None] | None = None  # (model, usage) -> None
     client: anthropic.Anthropic = field(default_factory=anthropic.Anthropic)
     notes: str = ""  # within-trial scratchpad, re-injected each pick (bounded)
-    last_pick_reason: str | None = None  # engine reads this into the pick event
+    last_pick_reason: str | None = None   # engine reads these into the pick event
+    last_pick_sources: dict | None = None  # auto-tracked research provenance
 
     def _system(self) -> list[dict]:
         return [
@@ -148,6 +149,10 @@ class LLMDrafter:
             dispatcher, prompt, TOOLS, done=lambda: dispatcher.pick_result is not None
         )
         self.last_pick_reason = dispatcher.pick_reason
+        self.last_pick_sources = {
+            "queries": dispatcher.searches,
+            "docs": dispatcher.docs_read,
+        }
         if dispatcher.pick_result is None:
             raise RuntimeError("drafter did not make a pick")  # engine auto-picks
         return dispatcher.pick_result

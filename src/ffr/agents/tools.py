@@ -152,6 +152,13 @@ class ToolDispatcher:
     pick_result: str | None = None      # set when make_pick is accepted
     pick_reason: str | None = None
     lineup_result: list[str] | None = None
+    # research provenance for the current pick (auto-tracked, not model-claimed)
+    searches: list[str] = None  # type: ignore[assignment]
+    docs_read: list[dict] = None  # type: ignore[assignment]
+
+    def __post_init__(self) -> None:
+        self.searches = []
+        self.docs_read = []
 
     def dispatch(self, name: str, args: dict) -> tuple[str, bool]:
         """Execute a tool. Returns (result_json, is_error)."""
@@ -164,6 +171,7 @@ class ToolDispatcher:
     def _run(self, name: str, args: dict):
         roster = self.engine.rosters[self.team_idx]
         if name == "search_news":
+            self.searches.append(args["query"])
             return self.corpus.search_news(
                 args["query"],
                 player_id=args.get("player_id"),
@@ -174,6 +182,14 @@ class ToolDispatcher:
             doc = self.corpus.read_document(int(args["doc_id"]))
             if doc is None:
                 return {"error": "document not found"}
+            self.docs_read.append(
+                {
+                    "source": doc["source"],
+                    "date": doc["effective_date"],
+                    "title": doc["title"],
+                    "url": doc["url"],
+                }
+            )
             doc["text"] = doc["text"][:8000]
             return doc
         if name == "get_adp":

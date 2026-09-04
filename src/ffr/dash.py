@@ -181,7 +181,11 @@ async function refreshDraft(){if(!$('run').value||$('season').value==='')return;
  for(let r=1;r<=rounds;r++){html+=`<tr><th>R${r}</th>`;
   for(let s=0;s<teams;s++){const p=grid[r+'-'+s];
    if(p){const cls=p.position+(p.forfeited?' forfeit':'');
-    const why=(p.reason||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    let tipText=p.reason||'';
+    if(p.sources){const s=p.sources;
+     if(s.queries&&s.queries.length)tipText+='\\n\\nsearched: '+s.queries.join(' | ');
+     if(s.docs&&s.docs.length)tipText+='\\nread:\\n'+s.docs.map(d=>`  [${d.source} ${d.date}] ${d.title||d.url}`).join('\\n')}
+    const why=tipText.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
     const tip=why?` title="${why}"`:'';const mark=why?' <span class="why">&#9432;</span>':'';
     html+=`<td class="${cls}"${tip}>${p.name}${mark}<br><span class="pos">${p.position}</span> <span class="adp">adp ${p.adp??''}</span></td>`}
    else{const isNext=d.picks.length&&!d.done&&nextCell(d)===r+'-'+s;html+=`<td class="${isNext?'cur':''}"></td>`}}

@@ -28,8 +28,9 @@ League settings:
     at that position automatically covers the slot that week. Handcuffs and
     bench depth therefore have real value.
   * BYE weeks: the slot is covered by the best of your bench OR the best
-    available waiver (undrafted) player, so byes are survivable; K/DST byes
-    are auto-streamed from waivers.
+    available waiver (undrafted) player, so byes are survivable.
+  * K/DST: any absence (bye or injury) auto-streams from waivers, so never
+    spend draft capital insuring those slots.
   * Substitutions are automatic next-man-up by season-to-date form — you make
     no in-season decisions, so draft the roster you'd want that engine to run.
 - Your team's score = sum of weekly lineup points. Highest of 14 teams wins.

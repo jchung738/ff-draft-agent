@@ -166,6 +166,32 @@ def test_bye_prefers_better_of_bench_and_waiver(sub_conn):
     assert total == pytest.approx(20 + 10 + 4)
 
 
+def test_kdst_injury_streams_from_waivers(sub_conn):
+    from ffr.draft.scoring import simulate_roster
+
+    # k_star (AAA): plays wk1 only (injured wk3, bye wk2). k_wav (BBB) undrafted.
+    sub_conn.executemany(
+        "INSERT INTO players VALUES (?,?,?,2015,2026)",
+        [("k_star", "Star Kicker", "K"), ("k_wav", "Waiver Kicker", "K")],
+    )
+    sub_conn.executemany(
+        "INSERT INTO player_seasons VALUES (?,2019,?, 'K',16)",
+        [("k_star", "AAA"), ("k_wav", "BBB")],
+    )
+    sub_conn.executemany(
+        "INSERT INTO weekly_points VALUES (?,2019,?,?)",
+        [("k_star", 1, 9.0), ("k_wav", 1, 6.0), ("k_wav", 2, 7.0), ("k_wav", 3, 8.0)],
+    )
+    sub_conn.commit()
+    sim = simulate_roster(
+        sub_conn, ["k_star"], [], 2019, drafted_ids={"k_star"}
+    )
+    # wk1 star 9 | wk2 bye -> waiver 7 | wk3 INJURY -> K streams from waivers -> 8
+    assert sim["total"] == pytest.approx(9 + 7 + 8)
+    wk3 = sim["weeks"][2]["slots"][0]
+    assert wk3["sub"] == {"cause": "injury", "from": "waiver"}
+
+
 def test_bench_player_covers_only_one_slot(sub_conn):
     from ffr.draft.scoring import score_roster
 

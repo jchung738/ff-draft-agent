@@ -6,7 +6,9 @@ Rules (all decisions use only backward-looking information):
   BENCH player who is active covers the slot — handcuffs earn their value.
 - BYE (starter's team has no game that week — a schedule fact known preseason):
   the slot is covered by the best of bench OR waivers (undrafted players),
-  matching how real managers stream bye weeks (especially K/DST).
+  matching how real managers stream bye weeks.
+- K/DST: these positions cannot be benched, so ANY absence (bye or injury)
+  streams from waivers — as real managers do.
 - "Best" = season-to-date PPG through the prior week; draft order breaks
   week-1 ties for bench. Byes never occur in week 1, so waiver ranking always
   has real data.
@@ -131,8 +133,8 @@ def simulate_roster(
                     b for b in bench_ids
                     if b not in used and pos_of(b) in eligible and (b, week) in pts
                 ]
-                if cause == "bye":
-                    # bye: waivers are fair game too (undrafted, active this week)
+                if cause == "bye" or slot in ("K", "DST"):
+                    # byes stream from waivers; K/DST always can (no bench allowed)
                     candidates += [
                         pid for (pid, wk) in pts
                         if wk == week

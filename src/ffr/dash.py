@@ -221,17 +221,28 @@ async function refreshTeamlog(){if(!$('run').value||$('logteam').value===''||$('
  const el=$('teamlog');
  if(!t.ready){el.innerHTML='<span class="muted">draft not finished — log appears when lineups lock</span>';return}
  const nm=pid=>t.names[pid]||pid;
- // weekly lineup table
+ // weekly lineup table: 9 slots + a column per bench player
+ const benchIds=Object.entries(t.players).filter(([,p])=>p.role==='bench').map(([pid])=>pid);
  let html='<div style="overflow:auto"><table><tr><th>wk</th>';
- t.weeks[0].slots.forEach(s=>html+=`<th>${s.slot}</th>`);html+='<th>total</th></tr>';
+ t.weeks[0].slots.forEach(s=>html+=`<th>${s.slot}</th>`);
+ html+='<th>total</th>';
+ benchIds.forEach(b=>html+=`<th class="muted">BN ${nm(b).split(' ').pop()}</th>`);
+ html+='</tr>';
  t.weeks.forEach(w=>{html+=`<tr><td>${w.week}</td>`;
+  const usedThisWeek=new Set(w.slots.map(s=>s.occupant).filter(Boolean));
   w.slots.forEach(s=>{
    if(!s.occupant){html+=`<td class="muted" title="${s.sub?nm(s.starter)+' out ('+s.sub.cause+'), no replacement':''}">—</td>`;return}
    const subbed=s.occupant!==s.starter;
    const style=subbed?(s.sub.cause==='bye'?'background:#1d3a52':'background:#4a2525'):'';
    const tip=subbed?` title="in for ${nm(s.starter)} (${s.sub.cause}) — from ${s.sub.from}"`:'';
    html+=`<td style="${style}"${tip}>${nm(s.occupant)}<br><span class="adp">${s.points}</span></td>`});
-  html+=`<td><b>${w.total}</b></td></tr>`});
+  html+=`<td><b>${w.total}</b></td>`;
+  benchIds.forEach(b=>{const v=t.players[b].weekly[w.week];
+   const active=usedThisWeek.has(b);
+   const style=active?'background:#1f3d2e':'opacity:.55';
+   const tip=active?' title="pulled into the lineup this week"':'';
+   html+=`<td style="${style}"${tip}>${v===undefined?'·':v}</td>`});
+  html+='</tr>'});
  html+='</table></div>';
  // roster moves list
  const moves=[];t.weeks.forEach(w=>w.slots.forEach(s=>{

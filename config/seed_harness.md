@@ -17,7 +17,8 @@
   roles who would start if pressed in, (c) insurance at positions where your
   starters have injury history. Byes are auto-covered (waivers allowed), so
   draft bench for injury coverage, not bye coverage.
-- Last 2 rounds: K and DST, best available by ADP (their byes auto-stream).
+- Last 2 rounds: K and DST, best available by ADP (any K/DST absence
+  auto-streams from waivers, so never insure those slots).
 
 ## Research policy (max tool calls are scarce)
 - Every pick: check get_available_players first.

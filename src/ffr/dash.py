@@ -356,17 +356,23 @@ async function refreshTeamlog(){if(!$('run').value||$('logteam').value===''||$('
 async function refreshHarness(){if(!$('run').value||$('agent').value==='')return;
  const h=await j('/api/run/'+$('run').value+'/harness/'+$('gen').value+'/'+$('agent').value);
  const esc=x=>String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;');
- let note='';
- if(h.status){const col={clean:'#7ee787',stripped:'#f1c40f',reverted:'#ff7b72'}[h.status]||'#9fb3c8';
-  note+=`<b style="color:${col}">audit: ${h.status}</b>`}
- if(h.audit){const v=(h.audit.llm&&h.audit.llm.violations)||[];const pre=h.audit.prescreen||[];
-  note+=` — ${v.length} LLM violation(s), ${pre.length} prescreen hit(s)`;
-  if(v.length||pre.length){note+='<details style="margin-top:4px"><summary style="cursor:pointer">show what was flagged</summary><table style="margin-top:4px">';
-   pre.forEach(p=>note+=`<tr><td class="muted">prescreen: ${esc(p.rule)}</td><td class="ddel">"${esc(p.span)}"</td></tr>`);
-   v.forEach(x=>note+=`<tr><td class="muted">${esc(x.reason||'')}</td><td class="ddel">"${esc(x.span)}"</td></tr>`);
-   note+='</table></details>'}}
- $('auditnote').innerHTML=note;
+ const noteKey=[$('run').value,$('gen').value,$('agent').value,h.status,JSON.stringify(h.audit||null)].join('|');
+ if($('auditnote').dataset.key!==noteKey){
+  const wasOpen=!!$('auditnote').querySelector('details[open]');
+  let note='';
+  if(h.status){const col={clean:'#7ee787',stripped:'#f1c40f',reverted:'#ff7b72'}[h.status]||'#9fb3c8';
+   note+=`<b style="color:${col}">audit: ${h.status}</b>`}
+  if(h.audit){const v=(h.audit.llm&&h.audit.llm.violations)||[];const pre=h.audit.prescreen||[];
+   note+=` — ${v.length} LLM violation(s), ${pre.length} prescreen hit(s)`;
+   if(v.length||pre.length){note+=`<details${wasOpen?' open':''} style="margin-top:4px"><summary style="cursor:pointer">show what was flagged</summary><table style="margin-top:4px">`;
+    pre.forEach(p=>note+=`<tr><td class="muted">prescreen: ${esc(p.rule)}</td><td class="ddel">"${esc(p.span)}"</td></tr>`);
+    v.forEach(x=>note+=`<tr><td class="muted">${esc(x.reason||'')}</td><td class="ddel">"${esc(x.span)}"</td></tr>`);
+    note+='</table></details>'}}
+  $('auditnote').innerHTML=note;$('auditnote').dataset.key=noteKey}
  const el=$('harness');
+ const bodyKey=noteKey+'|'+$('showdiff').checked+'|'+(h.diff||'').length+'|'+(h.text||'').length;
+ if(el.dataset.key===bodyKey)return;
+ el.dataset.key=bodyKey;
  if($('showdiff').checked&&h.diff){el.innerHTML=h.diff.split('\\n').map(l=>{
    const esc=l.replace(/&/g,'&amp;').replace(/</g,'&lt;');
    if(l.startsWith('+'))return `<span class="dadd">${esc}</span>`;

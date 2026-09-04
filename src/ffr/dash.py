@@ -129,6 +129,7 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>ff-draft-agent
  .QB{background:#3d2f4f}.RB{background:#1f3d2e}.WR{background:#1e3547}.TE{background:#4a3a20}.K{background:#3a2430}.DST{background:#31383f}
  .forfeit{outline:2px solid #c0392b} .cur{outline:2px solid #f1c40f}
  .pos{opacity:.65;font-size:9px} .adp{opacity:.5;font-size:9px}
+ td[title]{cursor:help} .why{color:#7ec8ff;font-size:9px}
  pre{background:#0d1116;border:1px solid #2a333d;border-radius:6px;padding:10px;font-size:11px;overflow:auto;max-height:480px;white-space:pre-wrap}
  .dadd{color:#7ee787}.ddel{color:#ff7b72}.dhead{color:#79c0ff}
  .rank1{color:#f1c40f;font-weight:bold} .muted{opacity:.55} .live{color:#7ee787}
@@ -179,7 +180,10 @@ async function refreshDraft(){if(!$('run').value||$('season').value==='')return;
  const grid={};d.picks.forEach(p=>{grid[p.round+'-'+p.slot]=p});
  for(let r=1;r<=rounds;r++){html+=`<tr><th>R${r}</th>`;
   for(let s=0;s<teams;s++){const p=grid[r+'-'+s];
-   if(p){const cls=p.position+(p.forfeited?' forfeit':'');html+=`<td class="${cls}">${p.name}<br><span class="pos">${p.position}</span> <span class="adp">adp ${p.adp??''}</span></td>`}
+   if(p){const cls=p.position+(p.forfeited?' forfeit':'');
+    const why=(p.reason||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    const tip=why?` title="${why}"`:'';const mark=why?' <span class="why">&#9432;</span>':'';
+    html+=`<td class="${cls}"${tip}>${p.name}${mark}<br><span class="pos">${p.position}</span> <span class="adp">adp ${p.adp??''}</span></td>`}
    else{const isNext=d.picks.length&&!d.done&&nextCell(d)===r+'-'+s;html+=`<td class="${isNext?'cur':''}"></td>`}}
   html+='</tr>'}
  t.innerHTML=html}

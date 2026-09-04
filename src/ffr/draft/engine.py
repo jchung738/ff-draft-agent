@@ -108,9 +108,11 @@ class DraftEngine:
         roster = self.rosters[team_idx]
         chosen: PoolPlayer | None = None
         forfeited = None
+        reason: str | None = None
         for attempt in range(2):
             try:
                 pid = drafter.pick(self, team_idx)
+                reason = getattr(drafter, "last_pick_reason", None)
             except Exception as e:  # drafter crash → auto-pick
                 forfeited = f"drafter error: {e}"
                 break
@@ -144,6 +146,7 @@ class DraftEngine:
                 "position": chosen.position,
                 "adp": chosen.adp,
                 "forfeited": forfeited,
+                "reason": reason if not forfeited else None,
             }
         )
 

@@ -109,7 +109,13 @@ TOOLS: list[dict] = [
         "description": "Draft a player by player_id. Ends your turn if the pick is legal.",
         "input_schema": {
             "type": "object",
-            "properties": {"player_id": {"type": "string"}},
+            "properties": {
+                "player_id": {"type": "string"},
+                "reasoning": {
+                    "type": "string",
+                    "description": "1-2 sentences: why this pick over the alternatives you considered",
+                },
+            },
             "required": ["player_id"],
         },
     },
@@ -144,6 +150,7 @@ class ToolDispatcher:
     engine: DraftEngine
     team_idx: int
     pick_result: str | None = None      # set when make_pick is accepted
+    pick_reason: str | None = None
     lineup_result: list[str] | None = None
 
     def dispatch(self, name: str, args: dict) -> tuple[str, bool]:
@@ -215,6 +222,7 @@ class ToolDispatcher:
             if not ok:
                 return {"error": f"illegal pick: {reason}"}
             self.pick_result = pid
+            self.pick_reason = (args.get("reasoning") or "").strip()[:600] or None
             return {"ok": True, "drafted": player.name}
         if name == "set_lineup":
             starters = list(args["starter_ids"])

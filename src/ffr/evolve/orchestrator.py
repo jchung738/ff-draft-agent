@@ -223,7 +223,10 @@ class Orchestrator:
                 pick_logs[i][season] = [e for e in all_picks if e["team"] == i]
 
         results = {
-            "scores": {str(i): s for i, s in scores.items()},
+            # stringify ALL keys so fresh results match the JSON-loaded shape
+            "scores": {
+                str(i): {str(se): v for se, v in s.items()} for i, s in scores.items()
+            },
             "ranks": self._ranks(scores, seasons),
             "picks": {str(i): {str(s): p for s, p in by.items()} for i, by in pick_logs.items()},
         }

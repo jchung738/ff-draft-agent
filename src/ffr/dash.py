@@ -10,11 +10,12 @@ from __future__ import annotations
 import difflib
 import json
 import re
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
 
-from ffr.config import RUNS_DIR
+from ffr.config import RUNS_DIR, lineup_config
 from ffr.data import store
 
 _SAFE = re.compile(r"^[A-Za-z0-9_\-]+$")
@@ -76,6 +77,7 @@ def _run_state(run_id: str) -> dict:
             {"gen": g, "results": results, "drafts": drafts, "agents": agents, "phase": phase}
         )
 
+    progress = _progress(run_id, gens)
     conn = store.connect()
     costs = [
         dict(r)
@@ -89,7 +91,67 @@ def _run_state(run_id: str) -> dict:
     ]
     total = round(sum(c["usd"] or 0 for c in costs), 2)
     conn.close()
-    return {"run_id": run_id, "generations": gens, "costs": costs, "total_usd": total}
+    return {
+        "run_id": run_id, "generations": gens, "costs": costs,
+        "total_usd": total, "progress": progress,
+    }
+
+
+def _mtime_span(files: list[Path]) -> float:
+    """Seconds elapsed since the earliest of these files was written."""
+    if not files:
+        return 0.0
+    return time.time() - min(f.stat().st_mtime for f in files)
+
+
+def _eta(done: int, total: int, elapsed: float) -> int | None:
+    if done <= 0 or elapsed <= 0:
+        return None
+    return int((total - done) * elapsed / done)
+
+
+def _progress(run_id: str, gens: list[dict]) -> dict | None:
+    """Done/total + rate-based ETA for the run's current phase."""
+    if not gens:
+        return None
+    cfg = lineup_config()
+    n_agents = max((len(g["agents"]) for g in gens), default=14) or 14
+
+    # rewriting: gen g writes harness files into gen g+1's dir one by one
+    for g in gens:
+        if g["phase"] == "rewriting harnesses":
+            files = list((_gen_dir(run_id, g["gen"] + 1) / "harnesses").glob("agent_*.md"))
+            done = len(files)
+            return {
+                "label": f"gen {g['gen']} → {g['gen'] + 1}: rewriting harnesses",
+                "done": done, "total": n_agents,
+                "eta_s": _eta(done, n_agents, _mtime_span(files)),
+            }
+
+    g = gens[-1]
+    if g["phase"] == "auditing harnesses":
+        files = list((_gen_dir(run_id, g["gen"]) / "harnesses").glob("*.audit.json"))
+        done = len(files)
+        return {
+            "label": f"gen {g['gen']}: auditing harnesses",
+            "done": done, "total": n_agents,
+            "eta_s": _eta(done, n_agents, _mtime_span(files)),
+        }
+    if g["phase"] in ("drafting", "starting draft") and g["drafts"]:
+        season = g["drafts"][-1]
+        f = _gen_dir(run_id, g["gen"]) / "drafts" / f"{season}.jsonl"
+        total = cfg.teams * cfg.rounds
+        done = sum(1 for e in _json_lines(f) if e.get("type") == "pick")
+        try:
+            start = f.stat().st_birthtime  # macOS
+        except AttributeError:
+            start = f.stat().st_ctime
+        return {
+            "label": f"gen {g['gen']}: drafting {season}",
+            "done": done, "total": total,
+            "eta_s": _eta(done, total, time.time() - start),
+        }
+    return None
 
 
 def _draft(run_id: str, gen: int, season: str) -> dict:
@@ -169,7 +231,12 @@ PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>ff-draft-agent
 </style></head><body>
 <header><h1>ff-draft-agent observer</h1>
  run <select id="run"></select> gen <select id="gen"></select> draft <select id="season"></select>
- <span id="status" class="muted"></span><span style="flex:1"></span>
+ <span id="status" class="muted"></span>
+ <span id="pwrap" style="display:none;align-items:center;gap:6px">
+  <span id="plabel" class="muted"></span>
+  <span style="display:inline-block;width:150px;height:10px;background:#232b34;border:1px solid #39434e;border-radius:5px;vertical-align:middle"><span id="pfill" style="display:block;height:10px;background:#7ec8ff;border-radius:5px;width:0%"></span></span>
+  <span id="peta" class="muted"></span></span>
+ <span style="flex:1"></span>
  <span id="cost" class="muted"></span></header>
 <main>
  <div class="card"><h2>Draft board <span id="live" class="live"></span></h2><div style="overflow:auto"><table class="board" id="board"></table></div></div>
@@ -197,6 +264,12 @@ async function refreshState(){if(!$('run').value)return;state=await j('/api/run/
   if(!g.drafts.length){$('board').innerHTML=`<tr><td style="padding:14px" class="muted">no draft yet for generation ${g.gen} — ${g.phase}. The board fills in when its draft starts.</td></tr>`;
    $('live').textContent='';$('teamlog').innerHTML='<span class="muted">available once this generation drafts</span>'}}
  $('cost').textContent='spend $'+state.total_usd;
+ const pr=state.progress;
+ if(pr){$('pwrap').style.display='inline-flex';
+  $('plabel').textContent=pr.label+' '+pr.done+'/'+pr.total;
+  $('pfill').style.width=Math.round(100*pr.done/pr.total)+'%';
+  $('peta').textContent=pr.eta_s==null?'':'~'+(pr.eta_s>=60?Math.round(pr.eta_s/60)+'m':pr.eta_s+'s')+' left'}
+ else{$('pwrap').style.display='none'}
  renderCosts();renderTrajectory();renderStandings()}
 function renderCosts(){const t=$('costs');t.innerHTML='<tr><th>phase</th><th>model</th><th>calls</th><th>input</th><th>cache-read</th><th>output</th><th>usd</th></tr>';
  state.costs.forEach(c=>{t.insertAdjacentHTML('beforeend',`<tr><td>${c.phase}</td><td>${c.model}</td><td>${c.calls}</td><td>${c.input_tok}</td><td>${c.cache_read_tok}</td><td>${c.output_tok}</td><td>$${c.usd}</td></tr>`)})}

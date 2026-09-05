@@ -165,6 +165,18 @@ def main() -> None:
     p.add_argument("--config", type=str, default=None, help="run config yaml")
     p.set_defaults(func=cmd_evolve)
 
+    p = sub.add_parser("assist", help="live draft assistant using the best harness")
+    p.add_argument("--season", type=int, default=2026)
+    p.add_argument("--slot", type=int, required=True, help="your draft slot (1-14)")
+    p.add_argument("--model", type=str, default="claude-sonnet-4-6")
+    p.add_argument("--run-id", type=str, default="ladder01")
+    p.add_argument("--harness", type=str, default=None, help="override harness file")
+    p.set_defaults(
+        func=lambda a: __import__("ffr.assist", fromlist=["run_assist"]).run_assist(
+            a.season, a.slot, a.model, a.run_id, a.harness
+        )
+    )
+
     p = sub.add_parser("eval-holdout", help="draft holdout seasons with final harnesses")
     p.add_argument("--run-id", type=str, required=True)
     p.add_argument("--config", type=str, default=None)

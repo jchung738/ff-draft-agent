@@ -144,14 +144,28 @@ def test_injury_uses_bench_next_man_up(sub_conn):
     assert sim["players"]["rb_star"]["weekly"] == {1: 20.0}
 
 
-def test_injury_never_pulls_from_waivers(sub_conn):
-    from ffr.draft.scoring import score_roster
+def test_injury_streams_waiver_when_bench_empty(sub_conn):
+    from ffr.draft.scoring import simulate_roster
 
-    # no bench at all: wk2 bye -> waiver 10; wk3 injury -> slot scores 0
-    total = score_roster(
-        sub_conn, ["rb_star"], [], 2019, drafted_ids={"rb_star"}
+    # no bench at all: wk2 bye -> waiver 10; wk3 injury with empty bench ->
+    # forced waiver add (a real manager never leaves the slot dead) -> 12
+    sim = simulate_roster(sub_conn, ["rb_star"], [], 2019, drafted_ids={"rb_star"})
+    assert sim["total"] == pytest.approx(20 + 10 + 12)
+    wk3 = sim["weeks"][2]["slots"][0]
+    assert wk3["sub"] == {"cause": "injury", "from": "waiver"}
+
+
+def test_injury_prefers_bench_over_stronger_waiver(sub_conn):
+    from ffr.draft.scoring import simulate_roster
+
+    # wk3 injury: bench rb_b2 (weaker, ppg ~2.5) must outrank waiver rb_wav
+    # (ppg ~9) — handcuff priority is the point of drafting bench
+    sim = simulate_roster(
+        sub_conn, ["rb_star"], ["rb_b2"], 2019, drafted_ids={"rb_star", "rb_b2"}
     )
-    assert total == pytest.approx(20 + 10 + 0)
+    wk3 = sim["weeks"][2]["slots"][0]
+    assert wk3["occupant"] == "rb_b2"
+    assert wk3["sub"] == {"cause": "injury", "from": "bench"}
 
 
 def test_bye_prefers_better_of_bench_and_waiver(sub_conn):
@@ -255,5 +269,6 @@ def test_bench_player_covers_only_one_slot(sub_conn):
         drafted_ids={"rb_star", "rb_star2", "rb_hand"},
     )
     # wk1: 20+18 | wk2: both on bye -> waivers: rb_wav 10 covers one, rb_b2 3 covers other
-    # wk3: both injured -> bench only -> hand 15 covers one, other slot 0
-    assert total == pytest.approx(38 + 13 + 15)
+    # wk3: both injured -> hand 15 covers one (bench first); the other slot has
+    # an empty bench -> forced waiver add -> rb_wav 12
+    assert total == pytest.approx(38 + 13 + 15 + 12)

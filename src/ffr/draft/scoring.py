@@ -8,6 +8,9 @@ Rules (all decisions use only backward-looking information):
   can win the job back symmetrically. Waivers never promote; K/DST excluded.
 - INJURY/INACTIVE (occupant's team plays, occupant doesn't): the best eligible
   BENCH player who is active covers the slot — handcuffs earn their value.
+  If NO eligible bench player is active, the slot streams from waivers (a real
+  manager forced to add a free agent) — bench always outranks waivers, so
+  handcuff value is untouched; dead slots are impossible.
 - BYE (team has no game that week — a schedule fact known preseason): the slot
   is covered by the best of bench OR waivers (undrafted players), matching how
   real managers stream bye weeks.
@@ -158,7 +161,11 @@ def simulate_roster(
                         best, best_form = b, bf
                 if best is None:
                     continue
-                owner_form = form(owner) or 0.0
+                # owner with <min_games recent form: judge on season PPG so a
+                # strong small sample isn't treated as zero
+                owner_form = form(owner)
+                if owner_form is None:
+                    owner_form = max(ppg(owner), 0.0)
                 if best_form >= max(owner_form * m_ratio, owner_form + m_pts):
                     bench_now.remove(best)
                     bench_now.append(owner)  # demoted: coverage + comeback path
@@ -182,8 +189,9 @@ def simulate_roster(
                     b for b in bench_now
                     if b not in used and pos_of(b) in eligible and (b, week) in pts
                 ]
-                if cause == "bye" or slot in ("K", "DST"):
-                    # byes stream from waivers; K/DST always can (no bench allowed)
+                if cause == "bye" or slot in ("K", "DST") or not candidates:
+                    # byes stream from waivers; K/DST always can (no bench);
+                    # and an empty bench forces a waiver add for any cause
                     candidates += [
                         pid for (pid, wk) in pts
                         if wk == week

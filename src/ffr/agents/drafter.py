@@ -301,7 +301,8 @@ class LLMDrafter:
         state, _ = dispatcher.dispatch("get_draft_state", {})
         available, _ = dispatcher.dispatch("get_available_players", {"limit": 25})
         prompt = (
-            f"Round {rnd}, overall pick {pick_no}. It is your turn.\n"
+            f"Round {rnd}, overall pick {pick_no} of the {engine.season} season draft. "
+            f"It is your turn.\n"
             f"<draft_state>\n{state}\n</draft_state>\n"
             f"<available_players>\n{available}\n</available_players>\n"
         )

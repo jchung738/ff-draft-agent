@@ -24,7 +24,7 @@ import yaml
 from rich.console import Console
 
 from ffr.agents.auditor import audit_harness
-from ffr.agents.drafter import LLMDrafter, usage_cost
+from ffr.agents.drafter import LLMDrafter, inject_mechanics, usage_cost
 from ffr.agents.prescreen import prescreen
 from ffr.agents.rewriter import rewrite_harness
 from ffr.config import CONFIG_DIR, RUNS_DIR
@@ -170,6 +170,7 @@ class Orchestrator:
             if frac > self.cfg["audit_strip_threshold"]:
                 final = self._last_clean_ancestor(gen, i)
                 status = "reverted"
+            final = inject_mechanics(final)  # system-owned section, kept current
             if report is not None:
                 (gen_dir / "harnesses" / f"agent_{i:02d}.audit.json").write_text(
                     json.dumps(report, indent=2, default=str)

@@ -28,6 +28,12 @@ Rules of the experiment:
   injury history, role ambiguity, rookie profiles), news-interpretation rules,
   and tool-usage policy (which tools to call, when, and what to look for).
 
+Your harness begins with a "League mechanics (system-provided)" section: those
+are the CURRENT scoring/simulation rules — treat them as ground truth (they
+override anything your strategy text assumed), reason about how to exploit
+them (promotion stashes, handcuff priority, never insuring K/DST), and copy
+that section through VERBATIM at the top of your rewrite.
+
 Study your draft results: where you gained or lost value vs the field, which
 picks busted and what pre-draft signals (news categories, ADP trends, history)
 could have flagged them. Then rewrite the harness to draft better in ANY season.

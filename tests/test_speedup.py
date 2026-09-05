@@ -88,6 +88,22 @@ def test_extension_granted_once_per_pick(tmp_path):
     assert json.loads(second)["granted"] is False  # once per pick
 
 
+def test_inject_mechanics_idempotent_and_replacing():
+    from ffr.agents.drafter import MECHANICS_HEADER, inject_mechanics
+
+    harness = "# Strategy\n- draft well\n"
+    once = inject_mechanics(harness)
+    assert once.count(MECHANICS_HEADER) == 1
+    assert once.startswith(MECHANICS_HEADER)
+    assert "- draft well" in once
+    # stale copies get replaced, never duplicated
+    stale = once.replace("last-3-games", "OLD RULE TEXT")
+    fresh = inject_mechanics(stale)
+    assert fresh.count(MECHANICS_HEADER) == 1
+    assert "OLD RULE TEXT" not in fresh
+    assert "last-3-games" in fresh
+
+
 def test_prep_tools_exclude_engine_and_pick():
     from ffr.agents.drafter import PREP_TOOLS
 

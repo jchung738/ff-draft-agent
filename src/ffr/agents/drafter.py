@@ -61,6 +61,32 @@ auto-picks for you (badly) — always end with make_pick.
 Your strategy document (written by you, refined across many drafts):
 """
 
+MECHANICS_HEADER = "## League mechanics (system-provided — kept current, do not edit)"
+MECHANICS_BLOCK = f"""{MECHANICS_HEADER}
+- 14-team half-PPR snake, 15 rounds. Lineup locked after the draft:
+  QB, 2 RB, 2 WR, TE, FLEX (RB/WR/TE), K, DST + 6 bench.
+- Weekly simulation; every decision is backward-looking (no hindsight):
+  * PROMOTION: a bench player whose last-3-games PPG beats a slot occupant's
+    by >=20% AND >=2 pts takes the starting slot until outplayed. Drafted
+    breakouts capture their breakout; waiver players NEVER promote.
+  * INJURY: your best ACTIVE bench player at the position covers the slot;
+    if none is active, a waiver fill covers (bench always outranks waivers).
+  * BYE: covered by the best of bench or waivers.
+  * K/DST: any absence streams from waivers — never spend picks insuring them.
+- Team score = sum of weekly lineup points, final regular-season week excluded.
+"""
+
+
+def inject_mechanics(harness: str) -> str:
+    """Prepend/refresh the system-owned mechanics section (idempotent)."""
+    import re
+
+    cleaned = re.sub(
+        rf"{re.escape(MECHANICS_HEADER)}.*?(?=\n## |\Z)", "", harness, flags=re.S
+    ).lstrip("\n")
+    return MECHANICS_BLOCK + "\n" + cleaned
+
+
 MODEL_PRICES = {  # USD per MTok: (input, output, cache_read, cache_write)
     "claude-haiku-4-5": (1.0, 5.0, 0.1, 1.25),
     "claude-sonnet-4-6": (3.0, 15.0, 0.3, 3.75),
